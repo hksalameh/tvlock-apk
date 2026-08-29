@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">TV Lock</string>
+    <string name="accessibility_service_description">Keeps the TV lock active during scheduled lock hours.</string>
+</resources>
