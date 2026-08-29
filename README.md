@@ -6,3 +6,4 @@
 - يدعم Android TV / Google TV
 - يحتاج تفعيل Display over other apps وAccessibility مرة واحدة
 - بدون Factory Reset أو Device Owner
+- البناء الآلي للـ APK مفعّل داخل هذا المستودع.
