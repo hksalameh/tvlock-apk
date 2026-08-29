@@ -1,0 +1,1 @@
+TV Lock uses a fixed signing key for sideloaded personal builds so future APK updates install over the previous version. This repository is not configured for Play Store production signing.
