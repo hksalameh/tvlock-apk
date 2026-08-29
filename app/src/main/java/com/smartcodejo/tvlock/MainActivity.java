@@ -2,7 +2,6 @@ package com.smartcodejo.tvlock;
 
 import android.app.Activity;
 import android.app.AlarmManager;
-import android.app.TimePickerDialog;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.graphics.Color;
@@ -90,14 +89,10 @@ public class MainActivity extends Activity {
 
         section("الجدول اليومي");
         Button start=button("بدء القفل: "+time(Prefs.startHour(this),Prefs.startMinute(this)));
-        start.setOnClickListener(v->new TimePickerDialog(this,(p,h,m)->{
-            Prefs.setStart(this,h,m); ScheduleUtil.reschedule(this); buildSettings();
-        },Prefs.startHour(this),Prefs.startMinute(this),false).show());
+        start.setOnClickListener(v->showRemoteTimeDialog(true));
 
         Button end=button("الفتح التلقائي: "+time(Prefs.endHour(this),Prefs.endMinute(this)));
-        end.setOnClickListener(v->new TimePickerDialog(this,(p,h,m)->{
-            Prefs.setEnd(this,h,m); ScheduleUtil.reschedule(this); buildSettings();
-        },Prefs.endHour(this),Prefs.endMinute(this),false).show());
+        end.setOnClickListener(v->showRemoteTimeDialog(false));
 
         section("أيام العمل");
         String[] names={"الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت","الأحد"};
@@ -146,6 +141,85 @@ public class MainActivity extends Activity {
             });
         }
         note("بعد تفعيل الصلاحيات مرة واحدة، يعمل الجدول تلقائيًا حتى بعد إعادة تشغيل الشاشة.");
+    }
+
+    private void showRemoteTimeDialog(boolean startTime){
+        final int[] value={
+                startTime?Prefs.startHour(this):Prefs.endHour(this),
+                startTime?Prefs.startMinute(this):Prefs.endMinute(this)
+        };
+
+        LinearLayout box=new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(Gravity.CENTER_HORIZONTAL);
+        box.setPadding(dp(32),dp(18),dp(32),dp(10));
+
+        TextView display=text(time(value[0],value[1]),34,Color.WHITE);
+        display.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        display.setGravity(Gravity.CENTER);
+        display.setPadding(0,0,0,dp(18));
+        box.addView(display,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(70)));
+
+        TextView help=text("استخدم الأسهم وزر OK فقط — لا تحتاج أرقام الريموت",16,Color.LTGRAY);
+        help.setGravity(Gravity.CENTER);
+        help.setPadding(0,0,0,dp(12));
+        box.addView(help);
+
+        LinearLayout hours=new LinearLayout(this);
+        hours.setOrientation(LinearLayout.HORIZONTAL);
+        hours.setGravity(Gravity.CENTER);
+        Button hourMinus=dialogButton("الساعة −");
+        Button hourPlus=dialogButton("الساعة +");
+        hours.addView(hourMinus,dialogButtonParams());
+        hours.addView(hourPlus,dialogButtonParams());
+        box.addView(hours,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(72)));
+
+        LinearLayout minutes=new LinearLayout(this);
+        minutes.setOrientation(LinearLayout.HORIZONTAL);
+        minutes.setGravity(Gravity.CENTER);
+        Button minuteMinus=dialogButton("الدقيقة −");
+        Button minutePlus=dialogButton("الدقيقة +");
+        minutes.addView(minuteMinus,dialogButtonParams());
+        minutes.addView(minutePlus,dialogButtonParams());
+        box.addView(minutes,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(72)));
+
+        Runnable update=()->display.setText(time(value[0],value[1]));
+        hourMinus.setOnClickListener(v->{ value[0]=(value[0]+23)%24; update.run(); });
+        hourPlus.setOnClickListener(v->{ value[0]=(value[0]+1)%24; update.run(); });
+        minuteMinus.setOnClickListener(v->{ value[1]=(value[1]+59)%60; update.run(); });
+        minutePlus.setOnClickListener(v->{ value[1]=(value[1]+1)%60; update.run(); });
+
+        android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(this)
+                .setTitle(startTime?"تغيير وقت بدء القفل":"تغيير وقت الفتح التلقائي")
+                .setView(box)
+                .setPositiveButton("حفظ",(d,w)->{
+                    if(startTime) Prefs.setStart(this,value[0],value[1]);
+                    else Prefs.setEnd(this,value[0],value[1]);
+                    ScheduleUtil.reschedule(this);
+                    LockOverlayService.sync(this);
+                    buildSettings();
+                })
+                .setNegativeButton("إلغاء",null)
+                .create();
+        dialog.setOnShowListener(x->hourPlus.requestFocus());
+        dialog.show();
+    }
+
+    private LinearLayout.LayoutParams dialogButtonParams(){
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(62),1);
+        lp.setMargins(dp(5),dp(4),dp(5),dp(4));
+        return lp;
+    }
+
+    private Button dialogButton(String s){
+        Button b=new Button(this);
+        b.setText(s);
+        b.setTextSize(18);
+        b.setTextColor(Color.WHITE);
+        b.setAllCaps(false);
+        b.setFocusable(true);
+        b.setBackgroundResource(R.drawable.focus_button);
+        return b;
     }
 
     private void refreshStatus(){
