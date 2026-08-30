@@ -23,4 +23,8 @@ public final class Prefs {
     public static void setDayEnabled(Context c, int isoDay, boolean v){ p(c).edit().putBoolean("day_"+isoDay, v).apply(); }
     public static long bypassUntil(Context c){ return p(c).getLong("bypass_until", 0L); }
     public static void setBypassUntil(Context c, long t){ p(c).edit().putLong("bypass_until", t).apply(); }
+
+    public static long adminBypassUntil(Context c){ return p(c).getLong("admin_bypass_until", 0L); }
+    public static void setAdminBypassUntil(Context c, long t){ p(c).edit().putLong("admin_bypass_until", t).apply(); }
+    public static boolean adminBypassActive(Context c){ return adminBypassUntil(c) > System.currentTimeMillis(); }
 }
