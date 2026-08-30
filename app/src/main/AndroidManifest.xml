@@ -22,6 +22,12 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".AdminGuardActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:finishOnTaskLaunch="true"/>
+
         <service android:name=".LockOverlayService" android:exported="false"/>
 
         <service
