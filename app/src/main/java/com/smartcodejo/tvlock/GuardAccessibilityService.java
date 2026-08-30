@@ -34,15 +34,15 @@ public class GuardAccessibilityService extends AccessibilityService {
         boolean uninstallWord=text.contains("uninstall") || text.contains("إلغاء التثبيت") || text.contains("حذف التطبيق") || text.contains("حذف");
         boolean installer=pkg.contains("packageinstaller") || cls.contains("uninstall");
         boolean settings=pkg.contains("android.tv.settings") || pkg.contains("com.android.settings") || pkg.contains("settings");
+        boolean launcherChoice=uninstallWord && target;
 
-        if(!target || !(installer || (settings && uninstallWord))) return;
+        if(!target || !(installer || (settings && uninstallWord) || launcherChoice)) return;
 
         long now=SystemClock.elapsedRealtime();
         if(now-lastGuardLaunch<1200) return;
         lastGuardLaunch=now;
 
-        Intent i=new Intent(this,MainActivity.class);
-        i.putExtra("uninstall_guard",true);
+        Intent i=new Intent(this,AdminGuardActivity.class);
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
         try { startActivity(i); } catch(Exception ignored) {}
     }
