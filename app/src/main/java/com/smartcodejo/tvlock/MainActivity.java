@@ -13,6 +13,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.text.InputType;
+import android.text.method.PasswordTransformationMethod;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -100,6 +101,7 @@ public class MainActivity extends Activity {
         note("اختر PIN من 4 إلى 8 أرقام. ستحتاجه لفتح التلفزيون قبل الموعد أو تغيير الإعدادات.");
         EditText pin=edit("PIN جديد");
         pin.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        pin.setTransformationMethod(PasswordTransformationMethod.getInstance());
         pin.setSingleLine(true);
         pin.setImeOptions(EditorInfo.IME_ACTION_DONE);
         Button save=button("حفظ وبدء الحماية");
@@ -128,6 +130,7 @@ public class MainActivity extends Activity {
         addCardTitle("أدخل PIN للمتابعة");
         EditText pin=edit("PIN");
         pin.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        pin.setTransformationMethod(PasswordTransformationMethod.getInstance());
         pin.setSingleLine(true);
         pin.setImeOptions(EditorInfo.IME_ACTION_DONE);
         Button enter=button("دخول إلى لوحة التحكم");
@@ -290,23 +293,24 @@ public class MainActivity extends Activity {
         };
         LinearLayout box=new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL); box.setGravity(Gravity.CENTER_HORIZONTAL);
-        box.setPadding(dp(24),dp(10),dp(24),dp(6));
+        box.setPadding(dp(18),dp(6),dp(18),dp(4));
 
-        TextView display=text(time(value[0],value[1]),26,Color.DKGRAY);
+        TextView display=text(time(value[0],value[1]),24,Color.WHITE);
         display.setTypeface(Typeface.DEFAULT,Typeface.BOLD); display.setGravity(Gravity.CENTER);
-        box.addView(display,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(48)));
-        TextView help=text("استخدم الأسهم وزر OK فقط",13,Color.GRAY); help.setGravity(Gravity.CENTER);
-        box.addView(help,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(28)));
+        display.setBackground(roundBg(Color.rgb(7,32,68),Color.rgb(73,154,238),12));
+        box.addView(display,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(46)));
+        TextView help=text("استخدم الأسهم وزر OK فقط",12,Color.rgb(190,210,235)); help.setGravity(Gravity.CENTER);
+        box.addView(help,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(24)));
 
         LinearLayout hours=new LinearLayout(this); hours.setOrientation(LinearLayout.HORIZONTAL); hours.setGravity(Gravity.CENTER);
         Button hourMinus=dialogButton("الساعة −"), hourPlus=dialogButton("الساعة +");
         hours.addView(hourMinus,dialogButtonParams()); hours.addView(hourPlus,dialogButtonParams());
-        box.addView(hours,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(56)));
+        box.addView(hours,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(52)));
 
         LinearLayout minutes=new LinearLayout(this); minutes.setOrientation(LinearLayout.HORIZONTAL); minutes.setGravity(Gravity.CENTER);
         Button minuteMinus=dialogButton("الدقيقة −"), minutePlus=dialogButton("الدقيقة +");
         minutes.addView(minuteMinus,dialogButtonParams()); minutes.addView(minutePlus,dialogButtonParams());
-        box.addView(minutes,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(56)));
+        box.addView(minutes,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(52)));
 
         Runnable update=()->display.setText(time(value[0],value[1]));
         hourMinus.setOnClickListener(v->{ value[0]=(value[0]+23)%24; update.run(); });
@@ -321,7 +325,16 @@ public class MainActivity extends Activity {
                     if(startTime) Prefs.setStart(this,value[0],value[1]); else Prefs.setEnd(this,value[0],value[1]);
                     ScheduleUtil.reschedule(this); LockOverlayService.sync(this); buildSettings();
                 }).setNegativeButton("إلغاء",null).create();
-        dialog.setOnShowListener(x->hourPlus.requestFocus()); dialog.show();
+        dialog.setOnShowListener(x->{
+            hourPlus.requestFocus();
+            if(dialog.getWindow()!=null){
+                int screenW=getResources().getDisplayMetrics().widthPixels;
+                int screenH=getResources().getDisplayMetrics().heightPixels;
+                dialog.getWindow().setLayout(Math.min(dp(560),(int)(screenW*.46f)),Math.min(dp(330),(int)(screenH*.62f)));
+                dialog.getWindow().setGravity(Gravity.CENTER);
+            }
+        });
+        dialog.show();
     }
 
     private void refreshStatus(){
@@ -335,6 +348,7 @@ public class MainActivity extends Activity {
     private void changePin(){
         EditText e=new EditText(this);
         e.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        e.setTransformationMethod(PasswordTransformationMethod.getInstance());
         e.setHint("PIN جديد"); e.setSingleLine(true); e.setImeOptions(EditorInfo.IME_ACTION_DONE);
         android.app.AlertDialog d=new android.app.AlertDialog.Builder(this)
                 .setTitle("تغيير PIN").setView(e).setPositiveButton("حفظ",null).setNegativeButton("إلغاء",null).create();
