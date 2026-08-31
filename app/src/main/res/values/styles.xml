@@ -5,5 +5,16 @@
         <item name="android:colorAccent">@color/accent</item>
         <item name="android:navigationBarColor">@color/bg</item>
         <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:alertDialogTheme">@style/TVLockDialogTheme</item>
+    </style>
+
+    <style name="TVLockDialogTheme" parent="android:style/Theme.Material.Dialog.Alert">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowMinWidthMajor">44%</item>
+        <item name="android:windowMinWidthMinor">44%</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:textColorPrimary">#FFFFFFFF</item>
+        <item name="android:textColorSecondary">#FFB8CBE2</item>
+        <item name="android:windowBackground">#FF0A1C39</item>
     </style>
 </resources>
