@@ -19,10 +19,10 @@ public class GuardAccessibilityService extends AccessibilityService {
 
     @Override public void onAccessibilityEvent(AccessibilityEvent event){
         if(ScheduleUtil.shouldLock(this)) LockOverlayService.sync(this);
-        protectUninstall(event);
+        protectSensitiveSettings(event);
     }
 
-    private void protectUninstall(AccessibilityEvent event){
+    private void protectSensitiveSettings(AccessibilityEvent event){
         if(event==null || Prefs.pin(this).isEmpty() || Prefs.adminBypassActive(this)) return;
 
         CharSequence pkgCs=event.getPackageName();
@@ -30,16 +30,49 @@ public class GuardAccessibilityService extends AccessibilityService {
         String cls=event.getClassName()==null?"":event.getClassName().toString().toLowerCase(Locale.ROOT);
         String text=collectText(event).toLowerCase(Locale.ROOT);
 
-        boolean target=text.contains("tv lock") || text.contains("com.smartcodejo.tvlock");
-        boolean uninstallWord=text.contains("uninstall") || text.contains("إلغاء التثبيت") || text.contains("حذف التطبيق") || text.contains("حذف");
-        boolean installer=pkg.contains("packageinstaller") || cls.contains("uninstall");
         boolean settings=pkg.contains("android.tv.settings") || pkg.contains("com.android.settings") || pkg.contains("settings");
-        boolean launcherChoice=uninstallWord && target;
+        boolean installer=pkg.contains("packageinstaller") || cls.contains("uninstall");
+        boolean target=text.contains("tv lock") || text.contains("com.smartcodejo.tvlock");
 
-        if(!target || !(installer || (settings && uninstallWord) || launcherChoice)) return;
+        boolean uninstallWord=
+                text.contains("uninstall") ||
+                text.contains("إلغاء التثبيت") ||
+                text.contains("حذف التطبيق") ||
+                text.contains("حذف");
+
+        boolean adminScreen=
+                text.contains("device admin") ||
+                text.contains("device administrator") ||
+                text.contains("device administrators") ||
+                text.contains("admin apps") ||
+                text.contains("device admin apps") ||
+                text.contains("مسؤول الجهاز") ||
+                text.contains("مسؤولي الجهاز") ||
+                text.contains("تطبيقات مشرف الجهاز") ||
+                text.contains("تطبيقات مسؤول الجهاز");
+
+        boolean deactivateWord=
+                text.contains("deactivate") ||
+                text.contains("disable administrator") ||
+                text.contains("remove administrator") ||
+                text.contains("remove admin") ||
+                text.contains("إلغاء التنشيط") ||
+                text.contains("تعطيل مسؤول الجهاز") ||
+                text.contains("إزالة مسؤول الجهاز") ||
+                text.contains("إلغاء مسؤول الجهاز");
+
+        boolean protectedPage =
+                target && (
+                        installer ||
+                        (settings && uninstallWord) ||
+                        (settings && adminScreen) ||
+                        (settings && deactivateWord)
+                );
+
+        if(!protectedPage) return;
 
         long now=SystemClock.elapsedRealtime();
-        if(now-lastGuardLaunch<1200) return;
+        if(now-lastGuardLaunch<900) return;
         lastGuardLaunch=now;
 
         Intent i=new Intent(this,AdminGuardActivity.class);
@@ -58,10 +91,10 @@ public class GuardAccessibilityService extends AccessibilityService {
     }
 
     private void appendNodeText(AccessibilityNodeInfo n,StringBuilder b,int depth){
-        if(n==null || depth>5 || b.length()>3000) return;
+        if(n==null || depth>7 || b.length()>5000) return;
         if(n.getText()!=null) b.append(' ').append(n.getText());
         if(n.getContentDescription()!=null) b.append(' ').append(n.getContentDescription());
-        int count=Math.min(n.getChildCount(),20);
+        int count=Math.min(n.getChildCount(),30);
         for(int i=0;i<count;i++){
             AccessibilityNodeInfo c=n.getChild(i);
             appendNodeText(c,b,depth+1);
