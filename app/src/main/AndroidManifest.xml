@@ -22,7 +22,7 @@
             </intent-filter>
         </activity>
 
-        <activity android:name=".UninstallGuardActivity" android:exported="false"/>
+        <activity android:name=".AdminGuardActivity" android:exported="false"/>
 
         <service android:name=".LockOverlayService" android:exported="false"/>
 
@@ -35,6 +35,18 @@
             </intent-filter>
             <meta-data android:name="android.accessibilityservice" android:resource="@xml/accessibility_service_config"/>
         </service>
+
+        <receiver
+            android:name=".TvDeviceAdminReceiver"
+            android:permission="android.permission.BIND_DEVICE_ADMIN"
+            android:exported="true">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin_receiver"/>
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED"/>
+            </intent-filter>
+        </receiver>
 
         <receiver android:name=".BootReceiver" android:enabled="true" android:exported="true">
             <intent-filter>
