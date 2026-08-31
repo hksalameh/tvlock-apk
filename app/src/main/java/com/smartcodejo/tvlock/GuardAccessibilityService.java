@@ -57,7 +57,7 @@ public class GuardAccessibilityService extends AccessibilityService {
             clicked=clicked.trim().toLowerCase(Locale.ROOT);
             if(clicked.equals("ok") || clicked.contains("uninstall") || clicked.contains("حذف") || clicked.contains("إلغاء التثبيت")){
                 performGlobalAction(GLOBAL_ACTION_BACK);
-                launchGuard();
+                launchGuard(true);
             }
         }
     }
@@ -68,7 +68,8 @@ public class GuardAccessibilityService extends AccessibilityService {
         if(uninstallDialogVisible && !Prefs.adminBypassActive(this)){
             int k=event.getKeyCode();
             if(k==KeyEvent.KEYCODE_DPAD_CENTER || k==KeyEvent.KEYCODE_ENTER || k==KeyEvent.KEYCODE_NUMPAD_ENTER){
-                launchGuard();
+                performGlobalAction(GLOBAL_ACTION_BACK);
+                launchGuard(true);
                 return true;
             }
             if(k==KeyEvent.KEYCODE_BACK){
@@ -82,11 +83,12 @@ public class GuardAccessibilityService extends AccessibilityService {
         return k==KeyEvent.KEYCODE_HOME || k==KeyEvent.KEYCODE_APP_SWITCH || k==KeyEvent.KEYCODE_MENU || k==KeyEvent.KEYCODE_SETTINGS;
     }
 
-    private void launchGuard(){
+    private void launchGuard(boolean uninstallFlow){
         long now=SystemClock.elapsedRealtime();
         if(now-lastGuardLaunch<700) return;
         lastGuardLaunch=now;
         Intent i=new Intent(this,AdminGuardActivity.class);
+        i.putExtra("uninstall_flow",uninstallFlow);
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
         try { startActivity(i); } catch(Exception ignored) {}
     }
