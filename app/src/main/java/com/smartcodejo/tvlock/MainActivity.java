@@ -262,6 +262,17 @@ public class MainActivity extends Activity {
             LockOverlayService.sync(this);
             buildSettings();
         });
+
+        section("إدارة التطبيق");
+        TextView uninstallNote=note("لحذف TV Lock بشكل مقصود، استخدم هذا الزر وأدخل PIN الصحيح.");
+        uninstallNote.setTextColor(Color.rgb(255,202,150));
+        Button uninstall=button("🗑  حذف التطبيق");
+        uninstall.setOnClickListener(v->{
+            Intent i=new Intent(this,AdminGuardActivity.class);
+            i.putExtra("uninstall",true);
+            startActivity(i);
+        });
+
         footer();
     }
 
