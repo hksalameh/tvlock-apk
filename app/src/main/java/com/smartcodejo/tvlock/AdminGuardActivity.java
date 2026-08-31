@@ -1,15 +1,21 @@
 package com.smartcodejo.tvlock;
 
 import android.app.Activity;
+import android.app.admin.DevicePolicyManager;
+import android.content.ComponentName;
+import android.content.Context;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Gravity;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
-import android.content.Context;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -19,9 +25,11 @@ import android.widget.Toast;
 
 public class AdminGuardActivity extends Activity {
     private final int CYAN=Color.rgb(83,210,255);
+    private boolean uninstallFlow=false;
 
     @Override protected void onCreate(Bundle b){
         super.onCreate(b);
+        uninstallFlow=getIntent()!=null && getIntent().getBooleanExtra("uninstall_flow",false);
 
         FrameLayout frame=new FrameLayout(this);
         frame.addView(new LockBackgroundView(this), new FrameLayout.LayoutParams(-1,-1));
@@ -37,12 +45,15 @@ public class AdminGuardActivity extends Activity {
         badge.setBackground(roundBg(Color.argb(190,12,75,148),CYAN,14));
         root.addView(badge,new LinearLayout.LayoutParams(dp(76),dp(34)));
 
-        TextView title=txt("حماية TV LOCK",28,Color.WHITE,true);
+        TextView title=txt(uninstallFlow?"تأكيد حذف TV LOCK":"حماية TV LOCK",28,Color.WHITE,true);
         title.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams tp=new LinearLayout.LayoutParams(-1,dp(48)); tp.setMargins(0,dp(8),0,0);
         root.addView(title,tp);
 
-        TextView note=txt("يلزم إدخال PIN قبل السماح بإلغاء تثبيت التطبيق أو تعديل إعداداته الحساسة",15,Color.rgb(185,211,240),false);
+        String noteText=uninstallFlow
+                ?"أدخل PIN للسماح بحذف التطبيق. بدون الرمز لن يتم إلغاء الحماية."
+                :"يلزم إدخال PIN قبل السماح بتعديل الإعدادات الحساسة";
+        TextView note=txt(noteText,15,Color.rgb(185,211,240),false);
         note.setGravity(Gravity.CENTER);
         root.addView(note,new LinearLayout.LayoutParams(Math.min(dp(760),(int)(getResources().getDisplayMetrics().widthPixels*.66f)),dp(58)));
 
@@ -58,7 +69,7 @@ public class AdminGuardActivity extends Activity {
         pp.setMargins(0,dp(8),0,dp(10)); root.addView(pin,pp);
 
         Button allow=new Button(this);
-        allow.setText("السماح لمدة دقيقتين");
+        allow.setText(uninstallFlow?"السماح بالحذف":"السماح لمدة دقيقتين");
         allow.setTextSize(17);
         allow.setTextColor(Color.WHITE);
         allow.setAllCaps(false);
@@ -74,8 +85,12 @@ public class AdminGuardActivity extends Activity {
             if(Prefs.pin(this).equals(pin.getText().toString())){
                 hideKeyboard(pin);
                 Prefs.setAdminBypassUntil(this,System.currentTimeMillis()+2*60*1000L);
-                Toast.makeText(this,"تم السماح مؤقتًا لمدة دقيقتين",Toast.LENGTH_SHORT).show();
-                finish();
+                if(uninstallFlow){
+                    allowUninstall();
+                }else{
+                    Toast.makeText(this,"تم السماح مؤقتًا لمدة دقيقتين",Toast.LENGTH_SHORT).show();
+                    finish();
+                }
             }else{
                 pin.setText("");
                 Toast.makeText(this,"PIN غير صحيح",Toast.LENGTH_SHORT).show();
@@ -89,9 +104,27 @@ public class AdminGuardActivity extends Activity {
         pin.requestFocus();
     }
 
-    @Override public void onBackPressed(){
-        finish();
+    private void allowUninstall(){
+        try{
+            DevicePolicyManager dpm=(DevicePolicyManager)getSystemService(Context.DEVICE_POLICY_SERVICE);
+            ComponentName admin=new ComponentName(this,TvDeviceAdminReceiver.class);
+            if(dpm!=null && dpm.isAdminActive(admin)) dpm.removeActiveAdmin(admin);
+        }catch(Exception ignored){}
+
+        Toast.makeText(this,"تم قبول PIN. سيتم فتح نافذة الحذف.",Toast.LENGTH_SHORT).show();
+        new Handler(Looper.getMainLooper()).postDelayed(()->{
+            try{
+                Intent delete=new Intent(Intent.ACTION_DELETE, Uri.parse("package:"+getPackageName()));
+                delete.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(delete);
+            }catch(Exception e){
+                Toast.makeText(this,"تعذر فتح نافذة الحذف",Toast.LENGTH_SHORT).show();
+            }
+            finish();
+        },900);
     }
+
+    @Override public void onBackPressed(){ finish(); }
 
     private void hideKeyboard(EditText e){
         InputMethodManager imm=(InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
