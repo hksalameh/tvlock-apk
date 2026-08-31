@@ -2,6 +2,7 @@ package com.smartcodejo.tvlock;
 
 import android.app.Activity;
 import android.app.AlarmManager;
+import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -12,8 +13,6 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
-import android.text.InputType;
-import android.text.method.PasswordTransformationMethod;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -99,9 +98,7 @@ public class MainActivity extends Activity {
         brandHeader("TV LOCK","إعداد الحماية لأول مرة");
         addCardTitle("أنشئ رمز الحماية");
         note("اختر PIN من 4 إلى 8 أرقام. ستحتاجه لفتح التلفزيون قبل الموعد أو تغيير الإعدادات.");
-        EditText pin=edit("PIN جديد");
-        pin.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_VARIATION_PASSWORD);
-        pin.setTransformationMethod(PasswordTransformationMethod.getInstance());
+        MaskedPinEditText pin=edit("PIN جديد");
         pin.setSingleLine(true);
         pin.setImeOptions(EditorInfo.IME_ACTION_DONE);
         Button save=button("حفظ وبدء الحماية");
@@ -114,6 +111,7 @@ public class MainActivity extends Activity {
             ScheduleUtil.reschedule(this);
             authenticated=true;
             buildDashboard();
+            requestDeviceAdmin();
         };
         save.setOnClickListener(action);
         pin.setOnEditorActionListener((v,id,event)->{
@@ -128,9 +126,7 @@ public class MainActivity extends Activity {
         authenticated=false; inSettings=false; baseRoot();
         brandHeader("TV LOCK","لوحة التحكم محمية");
         addCardTitle("أدخل PIN للمتابعة");
-        EditText pin=edit("PIN");
-        pin.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_VARIATION_PASSWORD);
-        pin.setTransformationMethod(PasswordTransformationMethod.getInstance());
+        MaskedPinEditText pin=edit("PIN");
         pin.setSingleLine(true);
         pin.setImeOptions(EditorInfo.IME_ACTION_DONE);
         Button enter=button("دخول إلى لوحة التحكم");
@@ -198,7 +194,7 @@ public class MainActivity extends Activity {
         Button settingsBtn=button("⚙  الإعدادات");
         settingsBtn.setOnClickListener(v->{ inSettings=true; buildSettings(); });
 
-        if(!Settings.canDrawOverlays(this) || !isAccessibilityEnabled()){
+        if(!Settings.canDrawOverlays(this) || !isAccessibilityEnabled() || !isDeviceAdminActive()){
             TextView warning=note("⚠ بعض صلاحيات الحماية غير مفعّلة. افتح الإعدادات لإكمالها.");
             warning.setTextColor(Color.rgb(255,202,120));
         }
@@ -242,6 +238,11 @@ public class MainActivity extends Activity {
         overlay.setOnClickListener(v->startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:"+getPackageName()))));
         Button acc=button(isAccessibilityEnabled()?"✓ Accessibility مفعّلة":"تفعيل Accessibility");
         acc.setOnClickListener(v->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+        Button admin=button(isDeviceAdminActive()?"✓ حماية الحذف مفعّلة":"تفعيل حماية الحذف");
+        admin.setOnClickListener(v->{
+            if(isDeviceAdminActive()) toast("حماية الحذف مفعّلة");
+            else requestDeviceAdmin();
+        });
 
         if(Build.VERSION.SDK_INT>=31){
             AlarmManager am=(AlarmManager)getSystemService(ALARM_SERVICE);
@@ -346,10 +347,11 @@ public class MainActivity extends Activity {
     }
 
     private void changePin(){
-        EditText e=new EditText(this);
-        e.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_VARIATION_PASSWORD);
-        e.setTransformationMethod(PasswordTransformationMethod.getInstance());
-        e.setHint("PIN جديد"); e.setSingleLine(true); e.setImeOptions(EditorInfo.IME_ACTION_DONE);
+        MaskedPinEditText e=new MaskedPinEditText(this);
+        e.setHint("PIN جديد");
+        e.setHintTextColor(Color.GRAY);
+        e.setSingleLine(true);
+        e.setImeOptions(EditorInfo.IME_ACTION_DONE);
         android.app.AlertDialog d=new android.app.AlertDialog.Builder(this)
                 .setTitle("تغيير PIN").setView(e).setPositiveButton("حفظ",null).setNegativeButton("إلغاء",null).create();
         d.setOnShowListener(x->d.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
@@ -375,6 +377,27 @@ public class MainActivity extends Activity {
         if(enabled==null) return false;
         ComponentName me=new ComponentName(this,GuardAccessibilityService.class);
         return enabled.toLowerCase().contains(me.flattenToString().toLowerCase());
+    }
+
+    private ComponentName adminComponent(){
+        return new ComponentName(this,TvDeviceAdminReceiver.class);
+    }
+
+    private boolean isDeviceAdminActive(){
+        DevicePolicyManager dpm=(DevicePolicyManager)getSystemService(DEVICE_POLICY_SERVICE);
+        return dpm!=null && dpm.isAdminActive(adminComponent());
+    }
+
+    private void requestDeviceAdmin(){
+        if(isDeviceAdminActive()) return;
+        try{
+            Intent i=new Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN);
+            i.putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN,adminComponent());
+            i.putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION,"تفعيل هذه الحماية يمنع حذف TV Lock بالطريقة العادية دون إلغاء صلاحية الإدارة أولًا.");
+            startActivity(i);
+        }catch(Exception e){
+            toast("هذه الشاشة لا تدعم تفعيل حماية الحذف من النظام.");
+        }
     }
 
     private LinearLayout card(){
@@ -433,9 +456,9 @@ public class MainActivity extends Activity {
         TextView t=new TextView(this); t.setText(s); t.setTextSize(sp); t.setTextColor(color); return t;
     }
 
-    private EditText edit(String hint){
-        EditText e=new EditText(this);
-        e.setHint(hint); e.setTextColor(Color.WHITE); e.setHintTextColor(Color.rgb(155,180,210));
+    private MaskedPinEditText edit(String hint){
+        MaskedPinEditText e=new MaskedPinEditText(this);
+        e.setHint(hint); e.setHintTextColor(Color.rgb(155,180,210));
         e.setTextSize(18); e.setGravity(Gravity.CENTER);
         e.setBackground(roundBg(Color.argb(155,7,32,68),Color.rgb(73,154,238),14));
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(Math.min(dp(360),(int)(getResources().getDisplayMetrics().widthPixels*.32f)),dp(48));
