@@ -5,8 +5,6 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
-import android.text.InputType;
-import android.text.method.PasswordTransformationMethod;
 import android.view.Gravity;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
@@ -48,15 +46,12 @@ public class AdminGuardActivity extends Activity {
         note.setGravity(Gravity.CENTER);
         root.addView(note,new LinearLayout.LayoutParams(Math.min(dp(760),(int)(getResources().getDisplayMetrics().widthPixels*.66f)),dp(58)));
 
-        EditText pin=new EditText(this);
+        MaskedPinEditText pin=new MaskedPinEditText(this);
         pin.setHint("PIN");
-        pin.setTextColor(Color.WHITE);
         pin.setHintTextColor(Color.rgb(155,180,210));
         pin.setTextSize(21);
         pin.setGravity(Gravity.CENTER);
         pin.setSingleLine(true);
-        pin.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_VARIATION_PASSWORD);
-        pin.setTransformationMethod(PasswordTransformationMethod.getInstance());
         pin.setImeOptions(EditorInfo.IME_ACTION_DONE);
         pin.setBackground(roundBg(Color.argb(180,7,32,68),Color.rgb(73,154,238),16));
         LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(Math.min(dp(420),(int)(getResources().getDisplayMetrics().widthPixels*.38f)),dp(58));
