@@ -3,7 +3,7 @@ name: Build TapMover APK
 on:
   push:
     branches:
-      - tapmover-build-20260923
+      - tapmover-fix
     paths:
       - 'TapMover/**'
       - '.github/workflows/tapmover-build.yml'
@@ -36,6 +36,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: TapMover-APK
+          name: TapMover-APK-1.1
           path: TapMover/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
