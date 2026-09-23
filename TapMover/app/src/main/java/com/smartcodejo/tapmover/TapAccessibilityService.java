@@ -33,8 +33,8 @@ public class TapAccessibilityService extends AccessibilityService {
     private static final long TAP_INTERVAL_MS = 250L;
     private static final long MOVE_INTERVAL_MS = 1000L;
     private static final int[][] OFFSETS_DP = new int[][] {
-            {0, -28}, {28, 0}, {0, 28}, {-28, 0},
-            {20, -20}, {20, 20}, {-20, 20}, {-20, -20}
+            {0, -12}, {12, 0}, {0, 12}, {-12, 0},
+            {8, -8}, {8, 8}, {-8, 8}, {-8, -8}
     };
 
     private final Runnable tapLoop = new Runnable() {
