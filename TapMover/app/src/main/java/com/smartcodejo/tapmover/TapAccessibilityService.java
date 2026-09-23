@@ -25,6 +25,9 @@ public class TapAccessibilityService extends AccessibilityService {
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean running = false;
+    private boolean targetAttached = false;
+    private int baseX = 0;
+    private int baseY = 0;
     private int pointIndex = 0;
     private long lastPointChange = 0L;
     private int currentDx = 0;
@@ -33,8 +36,7 @@ public class TapAccessibilityService extends AccessibilityService {
     private static final long TAP_INTERVAL_MS = 250L;
     private static final long MOVE_INTERVAL_MS = 1000L;
 
-    // Small, closely spaced movement around the target. Consecutive points
-    // are only a few dp apart so the tap area shifts gently once per second.
+    // Closely spaced points around the selected location.
     private static final int[][] OFFSETS_DP = new int[][] {
             {0, -6}, {4, -4}, {6, 0}, {4, 4},
             {0, 6}, {-4, 4}, {-6, 0}, {-4, -4}
@@ -46,11 +48,6 @@ public class TapAccessibilityService extends AccessibilityService {
             if (!running) return;
 
             try {
-                if (target == null || targetLp == null || !target.isAttachedToWindow()) {
-                    stopTapping();
-                    return;
-                }
-
                 long now = System.currentTimeMillis();
                 if (now - lastPointChange >= MOVE_INTERVAL_MS) {
                     int[] p = OFFSETS_DP[pointIndex % OFFSETS_DP.length];
@@ -61,14 +58,11 @@ public class TapAccessibilityService extends AccessibilityService {
                 }
 
                 Point screen = getScreenSize();
-                int rawX = targetLp.x + target.getWidth() / 2 + currentDx;
-                int rawY = targetLp.y + target.getHeight() / 2 + currentDy;
-
-                int x = clamp(rawX, 1, Math.max(1, screen.x - 2));
-                int y = clamp(rawY, 1, Math.max(1, screen.y - 2));
+                int x = clamp(baseX + currentDx, 1, Math.max(1, screen.x - 2));
+                int y = clamp(baseY + currentDy, 1, Math.max(1, screen.y - 2));
                 tapSafely(x, y);
             } catch (Throwable ignored) {
-                // Keep the accessibility service alive even if Android rejects one gesture.
+                // Never let a rejected gesture kill the accessibility service.
             }
 
             if (running) handler.postDelayed(this, TAP_INTERVAL_MS);
@@ -96,7 +90,8 @@ public class TapAccessibilityService extends AccessibilityService {
 
     @Override
     public void onDestroy() {
-        stopTapping();
+        running = false;
+        handler.removeCallbacks(tapLoop);
         removeOverlays();
         super.onDestroy();
     }
@@ -116,10 +111,28 @@ public class TapAccessibilityService extends AccessibilityService {
         targetLp = overlayParams(dp(46), dp(46), dp(120), dp(320));
         makeDraggable(target, targetLp);
         wm.addView(target, targetLp);
+        targetAttached = true;
     }
 
     private void startTapping() {
-        if (running || target == null || control == null) return;
+        if (running || target == null || targetLp == null || control == null) return;
+
+        // Save the exact center, then remove the target overlay so taps reach
+        // the app underneath instead of hitting our own ◎ bubble.
+        int targetWidth = target.getWidth() > 0 ? target.getWidth() : dp(46);
+        int targetHeight = target.getHeight() > 0 ? target.getHeight() : dp(46);
+        baseX = targetLp.x + targetWidth / 2;
+        baseY = targetLp.y + targetHeight / 2;
+
+        try {
+            if (targetAttached && target.isAttachedToWindow()) {
+                wm.removeView(target);
+                targetAttached = false;
+            }
+        } catch (Throwable ignored) {
+            targetAttached = false;
+        }
+
         running = true;
         pointIndex = 0;
         currentDx = 0;
@@ -128,18 +141,27 @@ public class TapAccessibilityService extends AccessibilityService {
         control.setText("■");
         control.setBackground(circle(Color.rgb(180, 45, 45)));
         handler.removeCallbacks(tapLoop);
-        handler.post(tapLoop);
+        handler.postDelayed(tapLoop, 100L);
     }
 
     private void stopTapping() {
         running = false;
         handler.removeCallbacks(tapLoop);
+
         if (control != null) {
             try {
                 control.setText("▶");
                 control.setBackground(circle(Color.rgb(30, 130, 70)));
             } catch (Throwable ignored) { }
         }
+
+        // Put the movable target back at the same location for the next run.
+        try {
+            if (wm != null && target != null && targetLp != null && !targetAttached && !target.isAttachedToWindow()) {
+                wm.addView(target, targetLp);
+                targetAttached = true;
+            }
+        } catch (Throwable ignored) { }
     }
 
     private void tapSafely(int x, int y) {
@@ -152,9 +174,7 @@ public class TapAccessibilityService extends AccessibilityService {
                     .addStroke(stroke)
                     .build();
             dispatchGesture(gesture, null, null);
-        } catch (Throwable ignored) {
-            // Invalid/out-of-range gestures should never crash the service.
-        }
+        } catch (Throwable ignored) { }
     }
 
     private TextView makeBubble(String text, int color) {
@@ -253,12 +273,13 @@ public class TapAccessibilityService extends AccessibilityService {
     }
 
     private void removeOverlays() {
-        try { if (control != null && wm != null) wm.removeView(control); } catch (Throwable ignored) {}
-        try { if (target != null && wm != null) wm.removeView(target); } catch (Throwable ignored) {}
+        try { if (control != null && wm != null && control.isAttachedToWindow()) wm.removeView(control); } catch (Throwable ignored) {}
+        try { if (target != null && wm != null && target.isAttachedToWindow()) wm.removeView(target); } catch (Throwable ignored) {}
         control = null;
         target = null;
         controlLp = null;
         targetLp = null;
+        targetAttached = false;
     }
 
     private int clamp(int value, int min, int max) {
