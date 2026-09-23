@@ -32,9 +32,12 @@ public class TapAccessibilityService extends AccessibilityService {
 
     private static final long TAP_INTERVAL_MS = 250L;
     private static final long MOVE_INTERVAL_MS = 1000L;
+
+    // Small, closely spaced movement around the target. Consecutive points
+    // are only a few dp apart so the tap area shifts gently once per second.
     private static final int[][] OFFSETS_DP = new int[][] {
-            {0, -12}, {12, 0}, {0, 12}, {-12, 0},
-            {8, -8}, {8, 8}, {-8, 8}, {-8, -8}
+            {0, -6}, {4, -4}, {6, 0}, {4, 4},
+            {0, 6}, {-4, 4}, {-6, 0}, {-4, -4}
     };
 
     private final Runnable tapLoop = new Runnable() {
