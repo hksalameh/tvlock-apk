@@ -91,7 +91,7 @@ public class TapAccessibilityService extends AccessibilityService {
         wm.addView(control, controlLp);
 
         target = makeBubble("◎", Color.argb(170, 230, 110, 20), dp(46));
-        targetLp = overlayParams(dp(46), dp(46), dp(500), dp(800));
+        targetLp = overlayParams(dp(46), dp(46), dp(180), dp(350));
         makeDraggable(target, targetLp);
         wm.addView(target, targetLp);
     }
