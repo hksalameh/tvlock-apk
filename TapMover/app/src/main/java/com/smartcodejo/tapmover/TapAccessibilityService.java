@@ -28,19 +28,15 @@ public class TapAccessibilityService extends AccessibilityService {
     private int pointIndex = 0;
     private long lastPointChange = 0L;
     private int currentDx = 0;
-    private int currentDy = -28;
+    private int currentDy = 0;
 
     private static final long TAP_INTERVAL_MS = 250L;
     private static final long MOVE_INTERVAL_MS = 1000L;
 
-    // Keep the working behavior of v1, but make consecutive points much closer.
-    // Radius 28dp keeps taps just outside the 46dp target bubble, while the
-    // next point is only about 11dp away.
+    // Very close points around the selected target.
     private static final int[][] OFFSETS_DP = new int[][] {
-            {0, -28}, {11, -26}, {20, -20}, {26, -11},
-            {28, 0}, {26, 11}, {20, 20}, {11, 26},
-            {0, 28}, {-11, 26}, {-20, 20}, {-26, 11},
-            {-28, 0}, {-26, -11}, {-20, -20}, {-11, -26}
+            {0, -6}, {4, -4}, {6, 0}, {4, 4},
+            {0, 6}, {-4, 4}, {-6, 0}, {-4, -4}
     };
 
     private final Runnable tapLoop = new Runnable() {
@@ -73,7 +69,7 @@ public class TapAccessibilityService extends AccessibilityService {
                 int y = clamp(baseY + currentDy, 1, Math.max(1, screen.y - 2));
                 tapSafely(x, y);
             } catch (Throwable ignored) {
-                // A rejected gesture must never kill the accessibility service.
+                // Keep running if Android rejects an individual gesture.
             }
 
             if (running) handler.postDelayed(this, TAP_INTERVAL_MS);
@@ -124,21 +120,42 @@ public class TapAccessibilityService extends AccessibilityService {
     }
 
     private void startTapping() {
-        if (running || target == null || control == null) return;
+        if (running || target == null || control == null || targetLp == null) return;
+
+        // Keep the target visible, but make it completely non-touchable while
+        // tapping so gestures pass through to the app underneath.
+        try {
+            targetLp.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+            if (wm != null && target.isAttachedToWindow()) {
+                wm.updateViewLayout(target, targetLp);
+            }
+        } catch (Throwable ignored) { }
+
         running = true;
         pointIndex = 0;
         currentDx = 0;
-        currentDy = dp(-28);
+        currentDy = 0;
         lastPointChange = 0L;
         control.setText("■");
         control.setBackground(circle(Color.rgb(180, 45, 45)));
         handler.removeCallbacks(tapLoop);
-        handler.post(tapLoop);
+        handler.postDelayed(tapLoop, 100L);
     }
 
     private void stopTapping() {
         running = false;
         handler.removeCallbacks(tapLoop);
+
+        // Make the target draggable again.
+        if (target != null && targetLp != null) {
+            try {
+                targetLp.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+                if (wm != null && target.isAttachedToWindow()) {
+                    wm.updateViewLayout(target, targetLp);
+                }
+            } catch (Throwable ignored) { }
+        }
+
         if (control != null) {
             try {
                 control.setText("▶");
