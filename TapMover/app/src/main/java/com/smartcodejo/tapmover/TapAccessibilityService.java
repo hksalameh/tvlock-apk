@@ -5,6 +5,7 @@ import android.accessibilityservice.GestureDescription;
 import android.graphics.Color;
 import android.graphics.Path;
 import android.graphics.PixelFormat;
+import android.graphics.Point;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
@@ -27,13 +28,13 @@ public class TapAccessibilityService extends AccessibilityService {
     private int pointIndex = 0;
     private long lastPointChange = 0L;
     private int currentDx = 0;
-    private int currentDy = -70;
+    private int currentDy = 0;
 
     private static final long TAP_INTERVAL_MS = 250L;
     private static final long MOVE_INTERVAL_MS = 1000L;
-    private static final int[][] OFFSETS = new int[][] {
-            {0, -70}, {70, 0}, {0, 70}, {-70, 0},
-            {50, -50}, {50, 50}, {-50, 50}, {-50, -50}
+    private static final int[][] OFFSETS_DP = new int[][] {
+            {0, -28}, {28, 0}, {0, 28}, {-28, 0},
+            {20, -20}, {20, 20}, {-20, 20}, {-20, -20}
     };
 
     private final Runnable tapLoop = new Runnable() {
@@ -41,19 +42,33 @@ public class TapAccessibilityService extends AccessibilityService {
         public void run() {
             if (!running) return;
 
-            long now = System.currentTimeMillis();
-            if (now - lastPointChange >= MOVE_INTERVAL_MS) {
-                int[] p = OFFSETS[pointIndex % OFFSETS.length];
-                currentDx = dp(p[0]);
-                currentDy = dp(p[1]);
-                pointIndex++;
-                lastPointChange = now;
+            try {
+                if (target == null || targetLp == null || !target.isAttachedToWindow()) {
+                    stopTapping();
+                    return;
+                }
+
+                long now = System.currentTimeMillis();
+                if (now - lastPointChange >= MOVE_INTERVAL_MS) {
+                    int[] p = OFFSETS_DP[pointIndex % OFFSETS_DP.length];
+                    currentDx = dp(p[0]);
+                    currentDy = dp(p[1]);
+                    pointIndex++;
+                    lastPointChange = now;
+                }
+
+                Point screen = getScreenSize();
+                int rawX = targetLp.x + target.getWidth() / 2 + currentDx;
+                int rawY = targetLp.y + target.getHeight() / 2 + currentDy;
+
+                int x = clamp(rawX, 1, Math.max(1, screen.x - 2));
+                int y = clamp(rawY, 1, Math.max(1, screen.y - 2));
+                tapSafely(x, y);
+            } catch (Throwable ignored) {
+                // Keep the accessibility service alive even if Android rejects one gesture.
             }
 
-            int x = targetLp.x + target.getWidth() / 2 + currentDx;
-            int y = targetLp.y + target.getHeight() / 2 + currentDy;
-            tap(x, y);
-            handler.postDelayed(this, TAP_INTERVAL_MS);
+            if (running) handler.postDelayed(this, TAP_INTERVAL_MS);
         }
     };
 
@@ -61,7 +76,11 @@ public class TapAccessibilityService extends AccessibilityService {
     protected void onServiceConnected() {
         super.onServiceConnected();
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
-        showOverlays();
+        try {
+            showOverlays();
+        } catch (Throwable ignored) {
+            removeOverlays();
+        }
     }
 
     @Override
@@ -80,9 +99,9 @@ public class TapAccessibilityService extends AccessibilityService {
     }
 
     private void showOverlays() {
-        if (control != null) return;
+        if (control != null || wm == null) return;
 
-        control = makeBubble("▶", Color.rgb(30, 130, 70), dp(58));
+        control = makeBubble("▶", Color.rgb(30, 130, 70));
         controlLp = overlayParams(dp(58), dp(58), dp(20), dp(180));
         control.setOnClickListener(v -> {
             if (running) stopTapping(); else startTapping();
@@ -90,19 +109,22 @@ public class TapAccessibilityService extends AccessibilityService {
         makeDraggable(control, controlLp);
         wm.addView(control, controlLp);
 
-        target = makeBubble("◎", Color.argb(170, 230, 110, 20), dp(46));
-        targetLp = overlayParams(dp(46), dp(46), dp(180), dp(350));
+        target = makeBubble("◎", Color.argb(170, 230, 110, 20));
+        targetLp = overlayParams(dp(46), dp(46), dp(120), dp(320));
         makeDraggable(target, targetLp);
         wm.addView(target, targetLp);
     }
 
     private void startTapping() {
-        if (running) return;
+        if (running || target == null || control == null) return;
         running = true;
         pointIndex = 0;
-        lastPointChange = 0;
+        currentDx = 0;
+        currentDy = 0;
+        lastPointChange = 0L;
         control.setText("■");
         control.setBackground(circle(Color.rgb(180, 45, 45)));
+        handler.removeCallbacks(tapLoop);
         handler.post(tapLoop);
     }
 
@@ -110,23 +132,29 @@ public class TapAccessibilityService extends AccessibilityService {
         running = false;
         handler.removeCallbacks(tapLoop);
         if (control != null) {
-            control.setText("▶");
-            control.setBackground(circle(Color.rgb(30, 130, 70)));
+            try {
+                control.setText("▶");
+                control.setBackground(circle(Color.rgb(30, 130, 70)));
+            } catch (Throwable ignored) { }
         }
     }
 
-    private void tap(int x, int y) {
-        Path path = new Path();
-        path.moveTo(x, y);
-        GestureDescription.StrokeDescription stroke =
-                new GestureDescription.StrokeDescription(path, 0, 40);
-        GestureDescription gesture = new GestureDescription.Builder()
-                .addStroke(stroke)
-                .build();
-        dispatchGesture(gesture, null, null);
+    private void tapSafely(int x, int y) {
+        try {
+            Path path = new Path();
+            path.moveTo(x, y);
+            GestureDescription.StrokeDescription stroke =
+                    new GestureDescription.StrokeDescription(path, 0, 35);
+            GestureDescription gesture = new GestureDescription.Builder()
+                    .addStroke(stroke)
+                    .build();
+            dispatchGesture(gesture, null, null);
+        } catch (Throwable ignored) {
+            // Invalid/out-of-range gestures should never crash the service.
+        }
     }
 
-    private TextView makeBubble(String text, int color, int size) {
+    private TextView makeBubble(String text, int color) {
         TextView v = new TextView(this);
         v.setText(text);
         v.setTextSize(24);
@@ -166,36 +194,72 @@ public class TapAccessibilityService extends AccessibilityService {
 
             @Override
             public boolean onTouch(View v, MotionEvent e) {
-                switch (e.getAction()) {
-                    case MotionEvent.ACTION_DOWN:
-                        startX = lp.x;
-                        startY = lp.y;
-                        downX = e.getRawX();
-                        downY = e.getRawY();
-                        moved = false;
-                        return true;
-                    case MotionEvent.ACTION_MOVE:
-                        float dx = e.getRawX() - downX;
-                        float dy = e.getRawY() - downY;
-                        if (Math.abs(dx) > dp(5) || Math.abs(dy) > dp(5)) moved = true;
-                        lp.x = startX + (int) dx;
-                        lp.y = startY + (int) dy;
-                        wm.updateViewLayout(v, lp);
-                        return true;
-                    case MotionEvent.ACTION_UP:
-                        if (!moved) v.performClick();
-                        return true;
+                try {
+                    switch (e.getActionMasked()) {
+                        case MotionEvent.ACTION_DOWN:
+                            startX = lp.x;
+                            startY = lp.y;
+                            downX = e.getRawX();
+                            downY = e.getRawY();
+                            moved = false;
+                            return true;
+                        case MotionEvent.ACTION_MOVE:
+                            float dx = e.getRawX() - downX;
+                            float dy = e.getRawY() - downY;
+                            if (Math.abs(dx) > dp(5) || Math.abs(dy) > dp(5)) moved = true;
+
+                            Point screen = getScreenSize();
+                            int maxX = Math.max(0, screen.x - v.getWidth());
+                            int maxY = Math.max(0, screen.y - v.getHeight());
+                            lp.x = clamp(startX + (int) dx, 0, maxX);
+                            lp.y = clamp(startY + (int) dy, 0, maxY);
+
+                            if (wm != null && v.isAttachedToWindow()) {
+                                wm.updateViewLayout(v, lp);
+                            }
+                            return true;
+                        case MotionEvent.ACTION_UP:
+                        case MotionEvent.ACTION_CANCEL:
+                            if (!moved && e.getActionMasked() == MotionEvent.ACTION_UP) {
+                                v.performClick();
+                            }
+                            return true;
+                    }
+                } catch (Throwable ignored) {
+                    return true;
                 }
                 return false;
             }
         });
     }
 
+    @SuppressWarnings("deprecation")
+    private Point getScreenSize() {
+        Point p = new Point();
+        try {
+            if (wm != null && wm.getDefaultDisplay() != null) {
+                wm.getDefaultDisplay().getRealSize(p);
+            }
+        } catch (Throwable ignored) { }
+
+        if (p.x <= 0 || p.y <= 0) {
+            p.x = getResources().getDisplayMetrics().widthPixels;
+            p.y = getResources().getDisplayMetrics().heightPixels;
+        }
+        return p;
+    }
+
     private void removeOverlays() {
-        try { if (control != null) wm.removeView(control); } catch (Exception ignored) {}
-        try { if (target != null) wm.removeView(target); } catch (Exception ignored) {}
+        try { if (control != null && wm != null) wm.removeView(control); } catch (Throwable ignored) {}
+        try { if (target != null && wm != null) wm.removeView(target); } catch (Throwable ignored) {}
         control = null;
         target = null;
+        controlLp = null;
+        targetLp = null;
+    }
+
+    private int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     private int dp(int v) {
