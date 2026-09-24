@@ -30,8 +30,8 @@ public class TapAccessibilityService extends AccessibilityService {
     private int currentDx = 0;
     private int currentDy = 0;
 
-    // About 12 taps per second.
-    private static final long TAP_INTERVAL_MS = 83L;
+    // 10 taps per second.
+    private static final long TAP_INTERVAL_MS = 100L;
     private static final long MOVE_INTERVAL_MS = 1000L;
 
     // Very close points around the selected target.
