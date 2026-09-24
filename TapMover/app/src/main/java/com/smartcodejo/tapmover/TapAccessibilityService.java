@@ -30,7 +30,8 @@ public class TapAccessibilityService extends AccessibilityService {
     private int currentDx = 0;
     private int currentDy = 0;
 
-    private static final long TAP_INTERVAL_MS = 250L;
+    // 8 taps per second.
+    private static final long TAP_INTERVAL_MS = 125L;
     private static final long MOVE_INTERVAL_MS = 1000L;
 
     // Very close points around the selected target.
@@ -122,8 +123,6 @@ public class TapAccessibilityService extends AccessibilityService {
     private void startTapping() {
         if (running || target == null || control == null || targetLp == null) return;
 
-        // Keep the target visible, but make it completely non-touchable while
-        // tapping so gestures pass through to the app underneath.
         try {
             targetLp.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
             if (wm != null && target.isAttachedToWindow()) {
@@ -146,7 +145,6 @@ public class TapAccessibilityService extends AccessibilityService {
         running = false;
         handler.removeCallbacks(tapLoop);
 
-        // Make the target draggable again.
         if (target != null && targetLp != null) {
             try {
                 targetLp.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
@@ -169,7 +167,7 @@ public class TapAccessibilityService extends AccessibilityService {
             Path path = new Path();
             path.moveTo(x, y);
             GestureDescription.StrokeDescription stroke =
-                    new GestureDescription.StrokeDescription(path, 0, 40);
+                    new GestureDescription.StrokeDescription(path, 0, 35);
             GestureDescription gesture = new GestureDescription.Builder()
                     .addStroke(stroke)
                     .build();
