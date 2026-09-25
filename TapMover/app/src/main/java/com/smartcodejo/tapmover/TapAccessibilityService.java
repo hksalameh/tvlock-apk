@@ -2,6 +2,7 @@ package com.smartcodejo.tapmover;
 
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.GestureDescription;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Path;
 import android.graphics.PixelFormat;
@@ -17,11 +18,15 @@ import android.view.accessibility.AccessibilityEvent;
 import android.widget.TextView;
 
 public class TapAccessibilityService extends AccessibilityService {
+    private static final String PREFS = "tap_settings";
+    private static final String KEY_TAPS_PER_SECOND = "taps_per_second";
+
     private WindowManager wm;
     private TextView control;
     private TextView target;
     private WindowManager.LayoutParams controlLp;
     private WindowManager.LayoutParams targetLp;
+    private SharedPreferences prefs;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean running = false;
@@ -29,9 +34,8 @@ public class TapAccessibilityService extends AccessibilityService {
     private long lastPointChange = 0L;
     private int currentDx = 0;
     private int currentDy = 0;
+    private long tapIntervalMs = 100L;
 
-    // 10 taps per second.
-    private static final long TAP_INTERVAL_MS = 100L;
     private static final long MOVE_INTERVAL_MS = 1000L;
 
     // Very close points around the selected target.
@@ -39,6 +43,13 @@ public class TapAccessibilityService extends AccessibilityService {
             {0, -6}, {4, -4}, {6, 0}, {4, 4},
             {0, 6}, {-4, 4}, {-6, 0}, {-4, -4}
     };
+
+    private final SharedPreferences.OnSharedPreferenceChangeListener prefListener =
+            (sharedPreferences, key) -> {
+                if (KEY_TAPS_PER_SECOND.equals(key)) {
+                    updateTapInterval();
+                }
+            };
 
     private final Runnable tapLoop = new Runnable() {
         @Override
@@ -73,7 +84,7 @@ public class TapAccessibilityService extends AccessibilityService {
                 // Keep running if Android rejects an individual gesture.
             }
 
-            if (running) handler.postDelayed(this, TAP_INTERVAL_MS);
+            if (running) handler.postDelayed(this, tapIntervalMs);
         }
     };
 
@@ -81,6 +92,10 @@ public class TapAccessibilityService extends AccessibilityService {
     protected void onServiceConnected() {
         super.onServiceConnected();
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+        prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        prefs.registerOnSharedPreferenceChangeListener(prefListener);
+        updateTapInterval();
+
         try {
             showOverlays();
         } catch (Throwable ignored) {
@@ -100,7 +115,22 @@ public class TapAccessibilityService extends AccessibilityService {
     public void onDestroy() {
         stopTapping();
         removeOverlays();
+        if (prefs != null) {
+            try {
+                prefs.unregisterOnSharedPreferenceChangeListener(prefListener);
+            } catch (Throwable ignored) { }
+        }
         super.onDestroy();
+    }
+
+    private void updateTapInterval() {
+        int tapsPerSecond = 10;
+        try {
+            if (prefs != null) {
+                tapsPerSecond = clamp(prefs.getInt(KEY_TAPS_PER_SECOND, 10), 5, 20);
+            }
+        } catch (Throwable ignored) { }
+        tapIntervalMs = Math.max(50L, 1000L / tapsPerSecond);
     }
 
     private void showOverlays() {
@@ -122,6 +152,8 @@ public class TapAccessibilityService extends AccessibilityService {
 
     private void startTapping() {
         if (running || target == null || control == null || targetLp == null) return;
+
+        updateTapInterval();
 
         try {
             targetLp.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
