@@ -10,6 +10,7 @@ import android.graphics.Point;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -30,6 +31,7 @@ public class TapAccessibilityService extends AccessibilityService {
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean running = false;
+    private boolean gestureInFlight = false;
     private int pointIndex = 0;
     private long lastPointChange = 0L;
     private int currentDx = 0;
@@ -37,8 +39,8 @@ public class TapAccessibilityService extends AccessibilityService {
     private long tapIntervalMs = 100L;
 
     private static final long MOVE_INTERVAL_MS = 1000L;
+    private static final long TAP_DURATION_MS = 12L;
 
-    // Very close points around the selected target.
     private static final int[][] OFFSETS_DP = new int[][] {
             {0, -6}, {4, -4}, {6, 0}, {4, 4},
             {0, 6}, {-4, 4}, {-6, 0}, {-4, -4}
@@ -54,37 +56,7 @@ public class TapAccessibilityService extends AccessibilityService {
     private final Runnable tapLoop = new Runnable() {
         @Override
         public void run() {
-            if (!running) return;
-
-            try {
-                if (target == null || targetLp == null || !target.isAttachedToWindow()) {
-                    stopTapping();
-                    return;
-                }
-
-                long now = System.currentTimeMillis();
-                if (now - lastPointChange >= MOVE_INTERVAL_MS) {
-                    int[] p = OFFSETS_DP[pointIndex % OFFSETS_DP.length];
-                    currentDx = dp(p[0]);
-                    currentDy = dp(p[1]);
-                    pointIndex++;
-                    lastPointChange = now;
-                }
-
-                int targetWidth = target.getWidth() > 0 ? target.getWidth() : dp(46);
-                int targetHeight = target.getHeight() > 0 ? target.getHeight() : dp(46);
-                int baseX = targetLp.x + targetWidth / 2;
-                int baseY = targetLp.y + targetHeight / 2;
-
-                Point screen = getScreenSize();
-                int x = clamp(baseX + currentDx, 1, Math.max(1, screen.x - 2));
-                int y = clamp(baseY + currentDy, 1, Math.max(1, screen.y - 2));
-                tapSafely(x, y);
-            } catch (Throwable ignored) {
-                // Keep running if Android rejects an individual gesture.
-            }
-
-            if (running) handler.postDelayed(this, tapIntervalMs);
+            dispatchNextTap();
         }
     };
 
@@ -130,7 +102,79 @@ public class TapAccessibilityService extends AccessibilityService {
                 tapsPerSecond = clamp(prefs.getInt(KEY_TAPS_PER_SECOND, 10), 5, 20);
             }
         } catch (Throwable ignored) { }
-        tapIntervalMs = Math.max(50L, 1000L / tapsPerSecond);
+        tapIntervalMs = Math.max(50L, Math.round(1000.0 / tapsPerSecond));
+    }
+
+    private void dispatchNextTap() {
+        if (!running || gestureInFlight) return;
+
+        long cycleStart = SystemClock.uptimeMillis();
+
+        try {
+            if (target == null || targetLp == null || !target.isAttachedToWindow()) {
+                stopTapping();
+                return;
+            }
+
+            long now = SystemClock.uptimeMillis();
+            if (now - lastPointChange >= MOVE_INTERVAL_MS) {
+                int[] p = OFFSETS_DP[pointIndex % OFFSETS_DP.length];
+                currentDx = dp(p[0]);
+                currentDy = dp(p[1]);
+                pointIndex++;
+                lastPointChange = now;
+            }
+
+            int targetWidth = target.getWidth() > 0 ? target.getWidth() : dp(46);
+            int targetHeight = target.getHeight() > 0 ? target.getHeight() : dp(46);
+            int baseX = targetLp.x + targetWidth / 2;
+            int baseY = targetLp.y + targetHeight / 2;
+
+            Point screen = getScreenSize();
+            int x = clamp(baseX + currentDx, 1, Math.max(1, screen.x - 2));
+            int y = clamp(baseY + currentDy, 1, Math.max(1, screen.y - 2));
+
+            Path path = new Path();
+            path.moveTo(x, y);
+            GestureDescription.StrokeDescription stroke =
+                    new GestureDescription.StrokeDescription(path, 0, TAP_DURATION_MS);
+            GestureDescription gesture = new GestureDescription.Builder()
+                    .addStroke(stroke)
+                    .build();
+
+            gestureInFlight = true;
+            boolean accepted = dispatchGesture(gesture,
+                    new AccessibilityService.GestureResultCallback() {
+                        @Override
+                        public void onCompleted(GestureDescription gestureDescription) {
+                            gestureInFlight = false;
+                            scheduleNextTap(cycleStart);
+                        }
+
+                        @Override
+                        public void onCancelled(GestureDescription gestureDescription) {
+                            gestureInFlight = false;
+                            scheduleNextTap(cycleStart);
+                        }
+                    }, handler);
+
+            if (!accepted) {
+                gestureInFlight = false;
+                scheduleNextTap(cycleStart);
+            }
+        } catch (Throwable ignored) {
+            gestureInFlight = false;
+            scheduleNextTap(cycleStart);
+        }
+    }
+
+    private void scheduleNextTap(long cycleStart) {
+        if (!running) return;
+        updateTapInterval();
+        long elapsed = Math.max(0L, SystemClock.uptimeMillis() - cycleStart);
+        long delay = Math.max(1L, tapIntervalMs - elapsed);
+        handler.removeCallbacks(tapLoop);
+        handler.postDelayed(tapLoop, delay);
     }
 
     private void showOverlays() {
@@ -163,6 +207,7 @@ public class TapAccessibilityService extends AccessibilityService {
         } catch (Throwable ignored) { }
 
         running = true;
+        gestureInFlight = false;
         pointIndex = 0;
         currentDx = 0;
         currentDy = 0;
@@ -175,6 +220,7 @@ public class TapAccessibilityService extends AccessibilityService {
 
     private void stopTapping() {
         running = false;
+        gestureInFlight = false;
         handler.removeCallbacks(tapLoop);
 
         if (target != null && targetLp != null) {
@@ -192,19 +238,6 @@ public class TapAccessibilityService extends AccessibilityService {
                 control.setBackground(circle(Color.rgb(30, 130, 70)));
             } catch (Throwable ignored) { }
         }
-    }
-
-    private void tapSafely(int x, int y) {
-        try {
-            Path path = new Path();
-            path.moveTo(x, y);
-            GestureDescription.StrokeDescription stroke =
-                    new GestureDescription.StrokeDescription(path, 0, 35);
-            GestureDescription gesture = new GestureDescription.Builder()
-                    .addStroke(stroke)
-                    .build();
-            dispatchGesture(gesture, null, null);
-        } catch (Throwable ignored) { }
     }
 
     private TextView makeBubble(String text, int color) {
