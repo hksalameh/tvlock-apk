@@ -29,7 +29,17 @@ public class GuardAccessibilityService extends AccessibilityService {
 
         String pkg=event.getPackageName()==null?"":event.getPackageName().toString().toLowerCase(Locale.ROOT);
         String cls=event.getClassName()==null?"":event.getClassName().toString().toLowerCase(Locale.ROOT);
-        boolean settingsOrInstaller = pkg.contains("settings") || pkg.contains("packageinstaller") || cls.contains("uninstall");
+        boolean settingsOrInstaller = pkg.contains("settings") || pkg.contains("packageinstaller") ||
+                cls.contains("settings") || cls.contains("uninstall");
+        // Android TV firmware may lack Device Admin UI. Protect system settings and
+        // package installer behind the parent's PIN using the bound accessibility service.
+        if (settingsOrInstaller &&
+                (event.getEventType()==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
+                 event.getEventType()==AccessibilityEvent.TYPE_WINDOWS_CHANGED)) {
+            uninstallDialogVisible=false;
+            launchGuard(false);
+            return;
+        }
         if(!settingsOrInstaller){
             uninstallDialogVisible=false;
             return;
