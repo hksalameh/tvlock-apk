@@ -48,6 +48,17 @@
             </intent-filter>
         </receiver>
 
+        <!-- Only privileged ADB shell may provision/read the lock schedule. -->
+        <receiver
+            android:name=".ProvisionReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP">
+            <intent-filter>
+                <action android:name="com.smartcodejo.tvlock.ADB_PROVISION"/>
+                <action android:name="com.smartcodejo.tvlock.ADB_STATUS"/>
+            </intent-filter>
+        </receiver>
+
         <receiver android:name=".BootReceiver" android:enabled="true" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
