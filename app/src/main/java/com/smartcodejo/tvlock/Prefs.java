@@ -9,7 +9,7 @@ public final class Prefs {
 
     public static boolean enabled(Context c){ return p(c).getBoolean("enabled", false); }
     public static void setEnabled(Context c, boolean v){ p(c).edit().putBoolean("enabled", v).apply(); }
-    public static int startHour(Context c){ return p(c).getInt("start_h", 1); }
+    public static int startHour(Context c){ return p(c).getInt("start_h", 0); }
     public static int startMinute(Context c){ return p(c).getInt("start_m", 0); }
     public static int endHour(Context c){ return p(c).getInt("end_h", 8); }
     public static int endMinute(Context c){ return p(c).getInt("end_m", 0); }
