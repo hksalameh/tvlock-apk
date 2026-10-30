@@ -124,7 +124,14 @@ public class AdminGuardActivity extends Activity {
         },900);
     }
 
-    @Override public void onBackPressed(){ finish(); }
+    @Override public void onBackPressed(){
+        // Never return an unauthenticated viewer to the protected Settings screen.
+        Intent home=new Intent(Intent.ACTION_MAIN);
+        home.addCategory(Intent.CATEGORY_HOME);
+        home.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try { startActivity(home); } catch(Exception ignored){}
+        finish();
+    }
 
     private void hideKeyboard(EditText e){
         InputMethodManager imm=(InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
