@@ -16,6 +16,7 @@ import java.security.SecureRandom;
 public final class ProvisionReceiver extends BroadcastReceiver {
     private static final String SETUP = "com.smartcodejo.tvlock.ADB_PROVISION";
     private static final String STATUS = "com.smartcodejo.tvlock.ADB_STATUS";
+    private static final String MIDNIGHT = "com.smartcodejo.tvlock.ADB_SET_MIDNIGHT";
 
     private void result(String message) {
         setResultData(message);
@@ -33,6 +34,23 @@ public final class ProvisionReceiver extends BroadcastReceiver {
             boolean admin = dpm != null && dpm.isAdminActive(
                 new ComponentName(c, TvDeviceAdminReceiver.class));
             result(schedule + ",admin=" + admin);
+            return;
+        }
+        if (MIDNIGHT.equals(action)) {
+            // Privileged ADB shell only (manifest requires android.permission.DUMP).
+            // Change just the start time; preserve PIN, end time, enabled state and weekdays.
+            if (Prefs.pin(c).isEmpty() || !Prefs.enabled(c)) {
+                result("HOLD: TV Lock not configured or disabled; settings unchanged");
+                return;
+            }
+            Prefs.setStart(c, 0, 0);
+            ScheduleUtil.reschedule(c);
+            LockOverlayService.sync(c);
+            result(String.format(java.util.Locale.ROOT,
+                "PASS: start=%02d:%02d,end=%02d:%02d,enabled=%s,pin_set=%s",
+                Prefs.startHour(c), Prefs.startMinute(c),
+                Prefs.endHour(c), Prefs.endMinute(c),
+                Prefs.enabled(c), !Prefs.pin(c).isEmpty()));
             return;
         }
         if (!SETUP.equals(action)) {
