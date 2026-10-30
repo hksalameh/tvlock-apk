@@ -39,14 +39,14 @@ public final class ProvisionReceiver extends BroadcastReceiver {
             result("BLOCK: unsupported operation");
             return;
         }
-        // Protect an existing installation: never replace an established PIN.
-        if (!Prefs.pin(c).isEmpty()) {
-            result("HOLD: PIN already configured. Existing settings unchanged");
-            return;
-        }
         String pin = intent.getStringExtra("pin");
         if (pin == null || !pin.matches("[0-9]{6,8}")) {
-            result("BLOCK: a fresh 6-8 digit PIN is required");
+            result("BLOCK: a 6-8 digit PIN is required");
+            return;
+        }
+        // A repeat setup with the same PIN is safe; never reset an unknown PIN.
+        if (!Prefs.pin(c).isEmpty() && !Prefs.pin(c).equals(pin)) {
+            result("HOLD: a different PIN is already configured. Existing settings unchanged");
             return;
         }
         Prefs.setPin(c, pin);
