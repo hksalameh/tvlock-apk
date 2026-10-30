@@ -9,6 +9,7 @@ import android.os.Build;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
+import java.time.ZoneOffset;
 
 public final class ScheduleUtil {
     private static LocalDateTime startFor(Context c, LocalDate d){
@@ -26,7 +27,7 @@ public final class ScheduleUtil {
         if(!Prefs.enabled(c)) return false;
         long nowMs = System.currentTimeMillis();
         if(Prefs.bypassUntil(c) > nowMs) return false;
-        ZonedDateTime now = ZonedDateTime.now();
+        ZonedDateTime now = ZonedDateTime.now(ZoneOffset.ofHours(3));
         LocalDate today = now.toLocalDate();
         for(int back=0; back<=1; back++){
             LocalDate d = today.minusDays(back);
@@ -39,7 +40,7 @@ public final class ScheduleUtil {
     }
 
     public static long currentWindowEnd(Context c){
-        ZonedDateTime now = ZonedDateTime.now();
+        ZonedDateTime now = ZonedDateTime.now(ZoneOffset.ofHours(3));
         LocalDate today = now.toLocalDate();
         for(int back=0; back<=1; back++){
             LocalDate d = today.minusDays(back);
@@ -62,7 +63,7 @@ public final class ScheduleUtil {
     }
 
     private static long nextTransition(Context c, boolean start){
-        ZonedDateTime now = ZonedDateTime.now();
+        ZonedDateTime now = ZonedDateTime.now(ZoneOffset.ofHours(3));
         long nowMs = System.currentTimeMillis();
         long best = Long.MAX_VALUE;
         int first = start ? 0 : -1;
