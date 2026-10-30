@@ -68,13 +68,13 @@ public final class ProvisionReceiver extends BroadcastReceiver {
             return;
         }
         Prefs.setPin(c, pin);
-        Prefs.setStart(c, 1, 0);
+        Prefs.setStart(c, 0, 0);
         Prefs.setEnd(c, 8, 0);
         for (int day=1; day<=7; day++) Prefs.setDayEnabled(c, day, true);
         Prefs.setBypassUntil(c, 0L);
         Prefs.setEnabled(c, true);
         ScheduleUtil.reschedule(c);
         LockOverlayService.sync(c);
-        result("PASS: schedule 01:00-08:00 set, PIN set, all 7 days enabled");
+        result("PASS: schedule 00:00-08:00 set, PIN set, all 7 days enabled");
     }
 }
