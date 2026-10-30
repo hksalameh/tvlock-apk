@@ -56,6 +56,7 @@
             <intent-filter>
                 <action android:name="com.smartcodejo.tvlock.ADB_PROVISION"/>
                 <action android:name="com.smartcodejo.tvlock.ADB_STATUS"/>
+                <action android:name="com.smartcodejo.tvlock.ADB_SET_MIDNIGHT"/>
             </intent-filter>
         </receiver>
 
