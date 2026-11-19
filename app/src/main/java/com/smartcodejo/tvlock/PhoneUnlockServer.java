@@ -31,6 +31,8 @@ final class PhoneUnlockServer {
     private final Listener listener;
     private volatile ServerSocket server;
     private volatile boolean running;
+    private final java.util.concurrent.ExecutorService pool =
+            java.util.concurrent.Executors.newFixedThreadPool(6);
     private int fails;
     private long lockedUntil;
 
@@ -61,13 +63,23 @@ final class PhoneUnlockServer {
             ServerSocket s = new ServerSocket(PORT);
             server = s;
             while (running) {
-                try (Socket c = s.accept()) {
-                    c.setSoTimeout(5000);
-                    handle(c);
+                try {
+                    final Socket c = s.accept();
+                    pool.execute(() -> {
+                        try {
+                            c.setSoTimeout(5000);
+                            handle(c);
+                            try { c.shutdownOutput(); } catch (IOException ignored) {}
+                        } catch (IOException ignored) {
+                        } finally {
+                            try { c.close(); } catch (IOException ignored) {}
+                        }
+                    });
                 } catch (IOException e) {
                     if (!running) break;
                 }
             }
+            pool.shutdownNow();
         } catch (IOException ignored) {
             running = false;
         }
