@@ -43,6 +43,7 @@ public class LockOverlayService extends Service {
     private TextView hint;
     private final StringBuilder entered = new StringBuilder();
     private boolean forced;
+    private PhoneUnlockServer phoneServer;
     private int sw;
     private int sh;
 
@@ -257,6 +258,11 @@ public class LockOverlayService extends Service {
         if (first != null) first.requestFocus();
         else safe.requestFocus();
 
+        if (phoneServer == null) {
+            phoneServer = new PhoneUnlockServer(this, () -> handler.post(this::unlockSuccess));
+            phoneServer.start();
+        }
+
         handler.removeCallbacks(ticker);
         handler.post(ticker);
     }
@@ -318,14 +324,18 @@ public class LockOverlayService extends Service {
         pinDots.setText(s.toString());
     }
 
+    private void unlockSuccess() {
+        if (!forced && ScheduleUtil.shouldLock(this)) {
+            Prefs.setBypassUntil(this, ScheduleUtil.currentWindowEnd(this));
+        }
+        entered.setLength(0);
+        forced = false;
+        stopSelf();
+    }
+
     private void tryUnlock() {
         if (Prefs.pin(this).equals(entered.toString())) {
-            if (!forced && ScheduleUtil.shouldLock(this)) {
-                Prefs.setBypassUntil(this, ScheduleUtil.currentWindowEnd(this));
-            }
-            entered.setLength(0);
-            forced = false;
-            stopSelf();
+            unlockSuccess();
         } else {
             entered.setLength(0);
             updateDots();
@@ -378,6 +388,10 @@ public class LockOverlayService extends Service {
 
     @Override public void onDestroy() {
         handler.removeCallbacks(ticker);
+        if (phoneServer != null) {
+            phoneServer.stop();
+            phoneServer = null;
+        }
         if (overlay != null && wm != null) {
             try { wm.removeView(overlay); } catch (Exception ignored) {}
             overlay = null;
