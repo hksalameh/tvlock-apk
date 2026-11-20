@@ -135,7 +135,11 @@ final class PhoneUnlockServer {
             String result = attempt(form.containsKey("pin") ? form.get("pin") : "");
             if (!"ok".equals(result)) {
                 msg = result;
+            } else if (reqLine.startsWith("POST /log")) {
+                write(c.getOutputStream(), 200, logPage(EventLog.read(ctx)));
+                return;
             } else if (reqLine.startsWith("POST /unlock")) {
+                EventLog.add(ctx, "فتح من الموبايل");
                 ok = true;
                 msg = "تم الفتح ✔";
             } else if (reqLine.startsWith("POST /tonight")) {
@@ -145,6 +149,7 @@ final class PhoneUnlockServer {
                     int tm = Integer.parseInt(t.substring(t.indexOf(':') + 1));
                     if (th < 24 && tm < 60) {
                         ScheduleUtil.setTonightStart(ctx, th, tm);
+                        EventLog.add(ctx, String.format(java.util.Locale.ROOT, "قفل الليلة فقط %02d:%02d من الموبايل", th, tm));
                         msg = String.format(java.util.Locale.ROOT, "تم: قفل الليلة فقط الساعة %02d:%02d ✔", th, tm);
                     } else msg = "وقت غير صالح";
                 } else msg = "وقت غير صالح";
@@ -169,13 +174,14 @@ final class PhoneUnlockServer {
         boolean custom = d.toString().equals(Prefs.tonightDate(ctx));
         return String.format(java.util.Locale.ROOT, "القفل الليلة يبدأ %02d:%02d%s — الفتح %02d:%02d%s",
                 st[0], st[1], custom ? " (معدّل لهذه الليلة فقط)" : "",
-                Prefs.endHour(ctx), Prefs.endMinute(ctx),
+                ScheduleUtil.effectiveEnd(ctx, d)[0], ScheduleUtil.effectiveEnd(ctx, d)[1],
                 ScheduleUtil.shouldLock(ctx) ? " — مقفول الآن" : "");
     }
 
     private synchronized String attempt(String pin) {
         long now = System.currentTimeMillis();
         if (now < lockedUntil) {
+            EventLog.add(ctx, "محاولة من الموبايل أثناء الإيقاف المؤقت");
             return "محاولات كثيرة — انتظر " + ((lockedUntil - now) / 1000 + 1) + " ثانية";
         }
         String real = Prefs.pin(ctx);
@@ -188,8 +194,10 @@ final class PhoneUnlockServer {
         if (++fails >= MAX_FAILS) {
             fails = 0;
             lockedUntil = now + LOCKOUT_MS;
+            EventLog.add(ctx, "5 محاولات PIN غلط من الموبايل — إيقاف 5 دقائق");
             return "PIN غير صحيح — تم إيقاف المحاولات 5 دقائق";
         }
+        EventLog.add(ctx, "PIN غلط من الموبايل");
         return "PIN غير صحيح";
     }
 
@@ -229,6 +237,15 @@ final class PhoneUnlockServer {
         out.flush();
     }
 
+    private static String logPage(String log) {
+        String safe = log.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+        return "<!doctype html><html lang='ar' dir='rtl'><head><meta charset='utf-8'>"
+                + "<meta name='viewport' content='width=device-width,initial-scale=1'><title>سجل TV Lock</title></head>"
+                + "<body style='font-family:sans-serif;background:#031230;color:#fff;margin:16px'>"
+                + "<h3>📋 السجل (الأحدث أولاً)</h3><pre style='white-space:pre-wrap;font-size:14px;direction:rtl'>" + safe
+                + "</pre><p><a style='color:#9cf' href='/'>رجوع</a></p></body></html>";
+    }
+
     private static String page(String msg, String status) {
         String m = msg == null ? "" : "<p style='color:" + (msg.contains("✔") ? "#8f8" : "#f88") + "'>" + msg + "</p>";
         String st = status.isEmpty() ? "" : "<p style='color:#9cf;font-size:15px'>" + status + "</p>";
@@ -240,6 +257,7 @@ final class PhoneUnlockServer {
         String tonight = "<form method='POST' action='/tonight'><h3>🌙 قفل الليلة فقط</h3>"
                 + "<input name='time' type='time' value='02:30' style='font-size:24px;width:100%;padding:10px;text-align:center;box-sizing:border-box'>"
                 + pin + "<button " + btn + ">تعيين لهذه الليلة فقط</button></form>"
+                + "<form method='POST' action='/log'><h3>📋 السجل</h3>" + pin + "<button " + btn + ">عرض السجل</button></form>"
                 + "<form method='POST' action='/clear'>" + pin + "<button " + btn + ">إلغاء تعديل الليلة</button></form>";
         return "<!doctype html><html lang='ar' dir='rtl'><head><meta charset='utf-8'>"
                 + "<meta name='viewport' content='width=device-width,initial-scale=1'>"

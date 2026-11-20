@@ -33,12 +33,14 @@ public class GuardAccessibilityService extends AccessibilityService {
     @Override protected void onServiceConnected(){
         super.onServiceConnected();
         instance=this;
+        EventLog.add(this,"Accessibility شغّالة");
         PhoneUnlockServer.ensureStarted(this);
         LockOverlayService.sync(this);
     }
 
     @Override public void onDestroy(){
         if(instance==this) instance=null;
+        EventLog.add(this,"⚠ Accessibility انطفأت");
         PhoneUnlockServer.stopInstance();
         super.onDestroy();
     }
@@ -131,6 +133,7 @@ public class GuardAccessibilityService extends AccessibilityService {
         long now=SystemClock.elapsedRealtime();
         if(now-lastGuardLaunch<700) return;
         lastGuardLaunch=now;
+        EventLog.add(this,uninstallFlow?"محاولة حذف التطبيق":"محاولة فتح الإعدادات/المثبّت");
         Intent i=new Intent(this,AdminGuardActivity.class);
         i.putExtra("uninstall_flow",uninstallFlow);
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);

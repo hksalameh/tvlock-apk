@@ -12,9 +12,16 @@ import java.time.ZonedDateTime;
 import java.time.ZoneOffset;
 
 public final class ScheduleUtil {
+    static final long WARN_MS = 5 * 60 * 1000L;
+
+    private static LocalDateTime baseStart(Context c, LocalDate d){
+        int iso = d.getDayOfWeek().getValue();
+        return d.atTime(Prefs.dayStartHour(c, iso), Prefs.dayStartMinute(c, iso));
+    }
+
     private static LocalDateTime startFor(Context c, LocalDate d){
         if(d.toString().equals(Prefs.tonightDate(c))) return d.atTime(Prefs.tonightHour(c), Prefs.tonightMinute(c));
-        return d.atTime(Prefs.startHour(c), Prefs.startMinute(c));
+        return baseStart(c, d);
     }
 
     /** Date of the lock window that "tonight" refers to: the current window if locked, else the next one. */
@@ -31,7 +38,7 @@ public final class ScheduleUtil {
         for(int i=0; i<8; i++){
             LocalDate d = today.plusDays(i);
             if(!Prefs.dayEnabled(c, d.getDayOfWeek().getValue())) continue;
-            if(d.atTime(Prefs.startHour(c), Prefs.startMinute(c)).atZone(now.getZone()).isAfter(now)) return d;
+            if(baseStart(c, d).atZone(now.getZone()).isAfter(now)) return d;
         }
         return today;
     }
@@ -40,6 +47,12 @@ public final class ScheduleUtil {
     public static int[] effectiveStart(Context c, LocalDate d){
         LocalDateTime s = startFor(c, d);
         return new int[]{ s.getHour(), s.getMinute() };
+    }
+
+    /** Effective end time (hour, minute) of the window that starts on date d. */
+    public static int[] effectiveEnd(Context c, LocalDate d){
+        LocalDateTime e = endFor(c, d);
+        return new int[]{ e.getHour(), e.getMinute() };
     }
 
     public static void setTonightStart(Context c, int h, int m){
@@ -57,7 +70,8 @@ public final class ScheduleUtil {
 
     private static LocalDateTime endFor(Context c, LocalDate d){
         LocalDateTime s = startFor(c, d);
-        LocalDateTime e = d.atTime(Prefs.endHour(c), Prefs.endMinute(c));
+        int iso = d.getDayOfWeek().getValue();
+        LocalDateTime e = d.atTime(Prefs.dayEndHour(c, iso), Prefs.dayEndMinute(c, iso));
         if(!e.isAfter(s)) e = e.plusDays(1);
         return e;
     }
@@ -96,9 +110,25 @@ public final class ScheduleUtil {
         if(am == null) return;
         cancel(am,c,1001,"START");
         cancel(am,c,1002,"END");
+        cancel(am,c,1003,"WARN");
         if(!Prefs.enabled(c)) return;
         set(am,c,1001,"START",nextTransition(c,true));
         set(am,c,1002,"END",nextTransition(c,false));
+        long warn = nextWarn(c);
+        if(warn > 0) set(am,c,1003,"WARN",warn);
+    }
+
+    private static long nextWarn(Context c){
+        ZonedDateTime now = ZonedDateTime.now(ZoneOffset.ofHours(3));
+        long nowMs = System.currentTimeMillis();
+        long best = Long.MAX_VALUE;
+        for(int i=0; i<9; i++){
+            LocalDate d = now.toLocalDate().plusDays(i);
+            if(!Prefs.dayEnabled(c, d.getDayOfWeek().getValue())) continue;
+            long ms = startFor(c,d).atZone(now.getZone()).toInstant().toEpochMilli() - WARN_MS;
+            if(ms > nowMs + 1000 && ms < best) best = ms;
+        }
+        return best == Long.MAX_VALUE ? -1L : best;
     }
 
     private static long nextTransition(Context c, boolean start){

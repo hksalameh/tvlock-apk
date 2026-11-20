@@ -15,6 +15,22 @@ public final class Prefs {
     public static int endMinute(Context c){ return p(c).getInt("end_m", 0); }
     public static void setStart(Context c, int h, int m){ p(c).edit().putInt("start_h", h).putInt("start_m", m).apply(); }
     public static void setEnd(Context c, int h, int m){ p(c).edit().putInt("end_h", h).putInt("end_m", m).apply(); }
+    // Optional per-weekday start/end (ISO day 1=Mon..7=Sun). Falls back to the general start/end.
+    public static boolean hasDayTimes(Context c, int iso){ return p(c).getBoolean("dt_set_"+iso, false); }
+    public static int dayStartHour(Context c, int iso){ return hasDayTimes(c,iso) ? p(c).getInt("dt_sh_"+iso, startHour(c)) : startHour(c); }
+    public static int dayStartMinute(Context c, int iso){ return hasDayTimes(c,iso) ? p(c).getInt("dt_sm_"+iso, startMinute(c)) : startMinute(c); }
+    public static int dayEndHour(Context c, int iso){ return hasDayTimes(c,iso) ? p(c).getInt("dt_eh_"+iso, endHour(c)) : endHour(c); }
+    public static int dayEndMinute(Context c, int iso){ return hasDayTimes(c,iso) ? p(c).getInt("dt_em_"+iso, endMinute(c)) : endMinute(c); }
+    public static void setDayTimes(Context c, int iso, int sh, int sm, int eh, int em){
+        p(c).edit().putBoolean("dt_set_"+iso, true).putInt("dt_sh_"+iso, sh).putInt("dt_sm_"+iso, sm)
+                .putInt("dt_eh_"+iso, eh).putInt("dt_em_"+iso, em).apply();
+    }
+    public static void clearAllDayTimes(Context c){
+        SharedPreferences.Editor e=p(c).edit();
+        for(int i=1;i<=7;i++) e.remove("dt_set_"+i);
+        e.apply();
+    }
+
     // One-night override: the lock window that STARTS on tonight_date uses this start time.
     // It is date-specific, so it expires by itself and the normal schedule returns tomorrow.
     public static String tonightDate(Context c){ return p(c).getString("tonight_date", ""); }

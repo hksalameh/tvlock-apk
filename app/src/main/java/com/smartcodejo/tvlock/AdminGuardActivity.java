@@ -85,6 +85,7 @@ public class AdminGuardActivity extends Activity {
             if(Prefs.pin(this).equals(pin.getText().toString())){
                 hideKeyboard(pin);
                 Prefs.setAdminBypassUntil(this,System.currentTimeMillis()+2*60*1000L);
+                EventLog.add(this,uninstallFlow?"PIN صحيح: السماح بالحذف":"PIN صحيح: سماح دقيقتين للإعدادات");
                 if(uninstallFlow){
                     allowUninstall();
                 }else{
@@ -93,6 +94,7 @@ public class AdminGuardActivity extends Activity {
                 }
             }else{
                 pin.setText("");
+                EventLog.add(this,"PIN غلط في شاشة الحماية");
                 Toast.makeText(this,"PIN غير صحيح",Toast.LENGTH_SHORT).show();
             }
         };

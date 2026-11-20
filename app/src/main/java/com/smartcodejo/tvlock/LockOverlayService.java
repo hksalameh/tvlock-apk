@@ -329,6 +329,7 @@ public class LockOverlayService extends Service {
     }
 
     private void unlockSuccess() {
+        EventLog.add(this, "فتح القفل بالـPIN");
         if (!forced && ScheduleUtil.shouldLock(this)) {
             Prefs.setBypassUntil(this, ScheduleUtil.currentWindowEnd(this));
         }
@@ -343,6 +344,7 @@ public class LockOverlayService extends Service {
         } else {
             entered.setLength(0);
             updateDots();
+            EventLog.add(this, "PIN غلط على شاشة القفل");
             hint.setText("PIN غير صحيح — حاول مرة أخرى");
             hint.setTextColor(Color.rgb(255, 125, 125));
         }
@@ -355,7 +357,14 @@ public class LockOverlayService extends Service {
     }
 
     private String formatEnd() {
-        int h = Prefs.endHour(this), m = Prefs.endMinute(this), hh = h % 12;
+        if (!ScheduleUtil.shouldLock(this)) {
+            int h0 = Prefs.endHour(this), m0 = Prefs.endMinute(this), hh0 = h0 % 12;
+            if (hh0 == 0) hh0 = 12;
+            return String.format(new Locale("ar"), "%d:%02d %s", hh0, m0, h0 < 12 ? "ص" : "م");
+        }
+        java.time.ZonedDateTime z = java.time.Instant.ofEpochMilli(ScheduleUtil.currentWindowEnd(this))
+                .atZone(java.time.ZoneOffset.ofHours(3));
+        int h = z.getHour(), m = z.getMinute(), hh = h % 12;
         if (hh == 0) hh = 12;
         return String.format(new Locale("ar"), "%d:%02d %s", hh, m, h < 12 ? "ص" : "م");
     }

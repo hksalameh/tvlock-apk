@@ -137,7 +137,7 @@ public class MainActivity extends Activity {
                 buildDashboard();
             } else {
                 pin.setText("");
-                toast("PIN غير صحيح");
+                { EventLog.add(this,"PIN غلط في لوحة التحكم"); toast("PIN غير صحيح"); }
             }
         };
         enter.setOnClickListener(action);
@@ -168,7 +168,7 @@ public class MainActivity extends Activity {
         times.setOrientation(LinearLayout.HORIZONTAL);
         times.setGravity(Gravity.CENTER);
         times.addView(infoCard("بدء القفل",time(ScheduleUtil.effectiveStart(this,ScheduleUtil.tonightWindowDate(this))[0],ScheduleUtil.effectiveStart(this,ScheduleUtil.tonightWindowDate(this))[1])),weightedCardParams());
-        times.addView(infoCard("الفتح التلقائي",time(Prefs.endHour(this),Prefs.endMinute(this))),weightedCardParams());
+        times.addView(infoCard("الفتح التلقائي",time(ScheduleUtil.effectiveEnd(this,ScheduleUtil.tonightWindowDate(this))[0],ScheduleUtil.effectiveEnd(this,ScheduleUtil.tonightWindowDate(this))[1])),weightedCardParams());
         root.addView(times,new LinearLayout.LayoutParams(Math.min(dp(700),(int)(getResources().getDisplayMetrics().widthPixels*.58f)),dp(88)));
 
         section("التحكم السريع");
@@ -240,7 +240,17 @@ public class MainActivity extends Activity {
         }
         root.addView(days,new LinearLayout.LayoutParams(Math.min(dp(900),(int)(getResources().getDisplayMetrics().widthPixels*.74f)),dp(46)));
 
+        section("وقت لكل يوم");
+        for(int i=1;i<=7;i++){
+            final int d=i; final String nm=names[i-1];
+            Button b=button(nm+":  "+time(Prefs.dayStartHour(this,d),Prefs.dayStartMinute(this,d))+" ← "+time(Prefs.dayEndHour(this,d),Prefs.dayEndMinute(this,d))+(Prefs.hasDayTimes(this,d)?"  *":""));
+            b.setOnClickListener(v->editDayTimes(d,nm));
+        }
+        Button resetDays=button("إعادة كل الأيام للوقت العام");
+        resetDays.setOnClickListener(v->{ Prefs.clearAllDayTimes(this); ScheduleUtil.reschedule(this); LockOverlayService.sync(this); buildSettings(); });
+
         section("الحماية والرسالة");
+        Button logBtn=button("📋 سجل الأحداث"); logBtn.setOnClickListener(v->showLogDialog());
         Button pin=button("تغيير PIN"); pin.setOnClickListener(v->changePin());
         Button msg=button("رسالة شاشة القفل"); msg.setOnClickListener(v->changeMessage());
 
@@ -322,11 +332,49 @@ public class MainActivity extends Activity {
     }
 
     private void showRemoteTimeDialog(boolean startTime,boolean tonight){
-        final int[] tw0=tonight?ScheduleUtil.effectiveStart(this,ScheduleUtil.tonightWindowDate(this)):null;
-        final int[] value={
-                tonight?tw0[0]:(startTime?Prefs.startHour(this):Prefs.endHour(this)),
-                tonight?tw0[1]:(startTime?Prefs.startMinute(this):Prefs.endMinute(this))
-        };
+        int h,m;
+        if(tonight){ int[] t=ScheduleUtil.effectiveStart(this,ScheduleUtil.tonightWindowDate(this)); h=t[0]; m=t[1]; }
+        else { h=startTime?Prefs.startHour(this):Prefs.endHour(this); m=startTime?Prefs.startMinute(this):Prefs.endMinute(this); }
+        String title=tonight?"وقت بدء القفل لهذه الليلة فقط":(startTime?"تغيير وقت بدء القفل":"تغيير وقت الفتح التلقائي");
+        pickTime(title,h,m,(hh,mm)->{
+            if(tonight){ ScheduleUtil.setTonightStart(this,hh,mm); buildSettings(); return; }
+            if(startTime) Prefs.setStart(this,hh,mm); else Prefs.setEnd(this,hh,mm);
+            ScheduleUtil.reschedule(this); LockOverlayService.sync(this); buildSettings();
+        });
+    }
+
+    private interface TimeSaver { void save(int h,int m); }
+
+    private void editDayTimes(int iso,String name){
+        final int sh0=Prefs.dayStartHour(this,iso), sm0=Prefs.dayStartMinute(this,iso);
+        final int eh0=Prefs.dayEndHour(this,iso), em0=Prefs.dayEndMinute(this,iso);
+        pickTime("بدء القفل — "+name,sh0,sm0,(sh,sm)->
+            pickTime("الفتح التلقائي — "+name,eh0,em0,(eh,em)->{
+                Prefs.setDayTimes(this,iso,sh,sm,eh,em);
+                ScheduleUtil.reschedule(this); LockOverlayService.sync(this); buildSettings();
+            }));
+    }
+
+    private void showLogDialog(){
+        android.widget.ScrollView sv=new android.widget.ScrollView(this);
+        sv.setFocusable(true);
+        TextView t=text(EventLog.read(this),13,Color.WHITE);
+        t.setPadding(dp(14),dp(10),dp(14),dp(10));
+        t.setTextIsSelectable(false);
+        sv.addView(t);
+        android.app.AlertDialog d=new android.app.AlertDialog.Builder(this)
+                .setTitle("سجل الأحداث").setView(sv).setPositiveButton("إغلاق",null).create();
+        d.setOnShowListener(x->{
+            if(d.getWindow()!=null){
+                int w=getResources().getDisplayMetrics().widthPixels, h=getResources().getDisplayMetrics().heightPixels;
+                d.getWindow().setLayout(Math.min(dp(700),(int)(w*.7f)),(int)(h*.8f));
+            }
+        });
+        d.show();
+    }
+
+    private void pickTime(String title,int h0,int m0,TimeSaver saver){
+        final int[] value={h0,m0};
         LinearLayout box=new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL); box.setGravity(Gravity.CENTER_HORIZONTAL);
         box.setPadding(dp(18),dp(6),dp(18),dp(4));
@@ -355,13 +403,9 @@ public class MainActivity extends Activity {
         minutePlus.setOnClickListener(v->{ value[1]=(value[1]+1)%60; update.run(); });
 
         android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(this)
-                .setTitle(tonight?"وقت بدء القفل لهذه الليلة فقط":(startTime?"تغيير وقت بدء القفل":"تغيير وقت الفتح التلقائي"))
+                .setTitle(title)
                 .setView(box)
-                .setPositiveButton("حفظ",(d,w)->{
-                    if(tonight){ ScheduleUtil.setTonightStart(this,value[0],value[1]); buildSettings(); return; }
-                    if(startTime) Prefs.setStart(this,value[0],value[1]); else Prefs.setEnd(this,value[0],value[1]);
-                    ScheduleUtil.reschedule(this); LockOverlayService.sync(this); buildSettings();
-                }).setNegativeButton("إلغاء",null).create();
+                .setPositiveButton("حفظ",(d,w)->saver.save(value[0],value[1])).setNegativeButton("إلغاء",null).create();
         dialog.setOnShowListener(x->{
             hourPlus.requestFocus();
             if(dialog.getWindow()!=null){
@@ -376,7 +420,7 @@ public class MainActivity extends Activity {
 
     private void refreshStatus(){
         if(status==null) return;
-        String s="الجدول "+(Prefs.enabled(this)?"يعمل":"متوقف")+"  •  "+time(ScheduleUtil.effectiveStart(this,ScheduleUtil.tonightWindowDate(this))[0],ScheduleUtil.effectiveStart(this,ScheduleUtil.tonightWindowDate(this))[1])+" ← "+time(Prefs.endHour(this),Prefs.endMinute(this));
+        String s="الجدول "+(Prefs.enabled(this)?"يعمل":"متوقف")+"  •  "+time(ScheduleUtil.effectiveStart(this,ScheduleUtil.tonightWindowDate(this))[0],ScheduleUtil.effectiveStart(this,ScheduleUtil.tonightWindowDate(this))[1])+" ← "+time(ScheduleUtil.effectiveEnd(this,ScheduleUtil.tonightWindowDate(this))[0],ScheduleUtil.effectiveEnd(this,ScheduleUtil.tonightWindowDate(this))[1]);
         if(ScheduleUtil.shouldLock(this)) s+="  •  وقت القفل الآن";
         else if(Prefs.bypassUntil(this)>System.currentTimeMillis()) s+="  •  فتح مؤقت";
         status.setText(s);
