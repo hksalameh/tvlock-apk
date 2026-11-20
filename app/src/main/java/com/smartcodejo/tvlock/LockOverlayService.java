@@ -306,7 +306,7 @@ public class LockOverlayService extends Service {
             hint.setTextColor(Color.rgb(207, 225, 245));
         }
         if (entered.length() < 8) {
-            entered.append(d);
+            lastInteraction = System.currentTimeMillis(); entered.append(d);
             updateDots();
         }
     }
