@@ -13,7 +13,46 @@ import java.time.ZoneOffset;
 
 public final class ScheduleUtil {
     private static LocalDateTime startFor(Context c, LocalDate d){
+        if(d.toString().equals(Prefs.tonightDate(c))) return d.atTime(Prefs.tonightHour(c), Prefs.tonightMinute(c));
         return d.atTime(Prefs.startHour(c), Prefs.startMinute(c));
+    }
+
+    /** Date of the lock window that "tonight" refers to: the current window if locked, else the next one. */
+    public static LocalDate tonightWindowDate(Context c){
+        ZonedDateTime now = ZonedDateTime.now(ZoneOffset.ofHours(3));
+        LocalDate today = now.toLocalDate();
+        for(int back=1; back>=0; back--){
+            LocalDate d = today.minusDays(back);
+            if(!Prefs.dayEnabled(c, d.getDayOfWeek().getValue())) continue;
+            ZonedDateTime s = startFor(c,d).atZone(now.getZone());
+            ZonedDateTime e = endFor(c,d).atZone(now.getZone());
+            if(!now.isBefore(s) && now.isBefore(e)) return d;
+        }
+        for(int i=0; i<8; i++){
+            LocalDate d = today.plusDays(i);
+            if(!Prefs.dayEnabled(c, d.getDayOfWeek().getValue())) continue;
+            if(d.atTime(Prefs.startHour(c), Prefs.startMinute(c)).atZone(now.getZone()).isAfter(now)) return d;
+        }
+        return today;
+    }
+
+    /** Effective start time (hour, minute) for the window on date d, with any one-night override applied. */
+    public static int[] effectiveStart(Context c, LocalDate d){
+        LocalDateTime s = startFor(c, d);
+        return new int[]{ s.getHour(), s.getMinute() };
+    }
+
+    public static void setTonightStart(Context c, int h, int m){
+        Prefs.setTonight(c, tonightWindowDate(c).toString(), h, m);
+        Prefs.setBypassUntil(c, 0L);
+        reschedule(c);
+        LockOverlayService.sync(c);
+    }
+
+    public static void clearTonightStart(Context c){
+        Prefs.clearTonight(c);
+        reschedule(c);
+        LockOverlayService.sync(c);
     }
 
     private static LocalDateTime endFor(Context c, LocalDate d){

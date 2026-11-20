@@ -167,7 +167,7 @@ public class MainActivity extends Activity {
         LinearLayout times=new LinearLayout(this);
         times.setOrientation(LinearLayout.HORIZONTAL);
         times.setGravity(Gravity.CENTER);
-        times.addView(infoCard("بدء القفل",time(Prefs.startHour(this),Prefs.startMinute(this))),weightedCardParams());
+        times.addView(infoCard("بدء القفل",time(ScheduleUtil.effectiveStart(this,ScheduleUtil.tonightWindowDate(this))[0],ScheduleUtil.effectiveStart(this,ScheduleUtil.tonightWindowDate(this))[1])),weightedCardParams());
         times.addView(infoCard("الفتح التلقائي",time(Prefs.endHour(this),Prefs.endMinute(this))),weightedCardParams());
         root.addView(times,new LinearLayout.LayoutParams(Math.min(dp(700),(int)(getResources().getDisplayMetrics().widthPixels*.58f)),dp(88)));
 
@@ -210,9 +210,20 @@ public class MainActivity extends Activity {
 
         section("الجدول اليومي");
         Button start=button("بدء القفل:  "+time(Prefs.startHour(this),Prefs.startMinute(this)));
-        start.setOnClickListener(v->showRemoteTimeDialog(true));
+        start.setOnClickListener(v->showRemoteTimeDialog(true,false));
         Button end=button("الفتح التلقائي:  "+time(Prefs.endHour(this),Prefs.endMinute(this)));
-        end.setOnClickListener(v->showRemoteTimeDialog(false));
+        end.setOnClickListener(v->showRemoteTimeDialog(false,false));
+        java.time.LocalDate tw=ScheduleUtil.tonightWindowDate(this);
+        boolean tonightSet=tw.toString().equals(Prefs.tonightDate(this));
+        int[] es=ScheduleUtil.effectiveStart(this,tw);
+        Button tonight=button("🌙 قفل هذه الليلة فقط:  "+time(es[0],es[1])+(tonightSet?"  (معدّل)":""));
+        tonight.setOnClickListener(v->showRemoteTimeDialog(true,true));
+        if(tonightSet){
+            Button undo=button("إلغاء تعديل الليلة");
+            undo.setOnClickListener(v->{ ScheduleUtil.clearTonightStart(this); buildSettings(); });
+        }
+        String ip=localIp();
+        if(ip!=null) note("التحكم من الموبايل (نفس الواي فاي): http://"+ip+":"+PhoneUnlockServer.PORT);
 
         section("أيام العمل");
         String[] names={"الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت","الأحد"};
@@ -298,10 +309,23 @@ public class MainActivity extends Activity {
         d.setOnShowListener(x->b30.requestFocus()); d.show();
     }
 
-    private void showRemoteTimeDialog(boolean startTime){
+    private String localIp(){
+        try{
+            for(java.util.Enumeration<java.net.NetworkInterface> e=java.net.NetworkInterface.getNetworkInterfaces();e!=null&&e.hasMoreElements();){
+                for(java.util.Enumeration<java.net.InetAddress> a=e.nextElement().getInetAddresses();a.hasMoreElements();){
+                    java.net.InetAddress x=a.nextElement();
+                    if(x instanceof java.net.Inet4Address && x.isSiteLocalAddress()) return x.getHostAddress();
+                }
+            }
+        }catch(Exception ignored){}
+        return null;
+    }
+
+    private void showRemoteTimeDialog(boolean startTime,boolean tonight){
+        final int[] tw0=tonight?ScheduleUtil.effectiveStart(this,ScheduleUtil.tonightWindowDate(this)):null;
         final int[] value={
-                startTime?Prefs.startHour(this):Prefs.endHour(this),
-                startTime?Prefs.startMinute(this):Prefs.endMinute(this)
+                tonight?tw0[0]:(startTime?Prefs.startHour(this):Prefs.endHour(this)),
+                tonight?tw0[1]:(startTime?Prefs.startMinute(this):Prefs.endMinute(this))
         };
         LinearLayout box=new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL); box.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -331,9 +355,10 @@ public class MainActivity extends Activity {
         minutePlus.setOnClickListener(v->{ value[1]=(value[1]+1)%60; update.run(); });
 
         android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(this)
-                .setTitle(startTime?"تغيير وقت بدء القفل":"تغيير وقت الفتح التلقائي")
+                .setTitle(tonight?"وقت بدء القفل لهذه الليلة فقط":(startTime?"تغيير وقت بدء القفل":"تغيير وقت الفتح التلقائي"))
                 .setView(box)
                 .setPositiveButton("حفظ",(d,w)->{
+                    if(tonight){ ScheduleUtil.setTonightStart(this,value[0],value[1]); buildSettings(); return; }
                     if(startTime) Prefs.setStart(this,value[0],value[1]); else Prefs.setEnd(this,value[0],value[1]);
                     ScheduleUtil.reschedule(this); LockOverlayService.sync(this); buildSettings();
                 }).setNegativeButton("إلغاء",null).create();
@@ -351,7 +376,7 @@ public class MainActivity extends Activity {
 
     private void refreshStatus(){
         if(status==null) return;
-        String s="الجدول "+(Prefs.enabled(this)?"يعمل":"متوقف")+"  •  "+time(Prefs.startHour(this),Prefs.startMinute(this))+" ← "+time(Prefs.endHour(this),Prefs.endMinute(this));
+        String s="الجدول "+(Prefs.enabled(this)?"يعمل":"متوقف")+"  •  "+time(ScheduleUtil.effectiveStart(this,ScheduleUtil.tonightWindowDate(this))[0],ScheduleUtil.effectiveStart(this,ScheduleUtil.tonightWindowDate(this))[1])+" ← "+time(Prefs.endHour(this),Prefs.endMinute(this));
         if(ScheduleUtil.shouldLock(this)) s+="  •  وقت القفل الآن";
         else if(Prefs.bypassUntil(this)>System.currentTimeMillis()) s+="  •  فتح مؤقت";
         status.setText(s);

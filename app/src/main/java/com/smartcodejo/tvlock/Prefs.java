@@ -15,6 +15,13 @@ public final class Prefs {
     public static int endMinute(Context c){ return p(c).getInt("end_m", 0); }
     public static void setStart(Context c, int h, int m){ p(c).edit().putInt("start_h", h).putInt("start_m", m).apply(); }
     public static void setEnd(Context c, int h, int m){ p(c).edit().putInt("end_h", h).putInt("end_m", m).apply(); }
+    // One-night override: the lock window that STARTS on tonight_date uses this start time.
+    // It is date-specific, so it expires by itself and the normal schedule returns tomorrow.
+    public static String tonightDate(Context c){ return p(c).getString("tonight_date", ""); }
+    public static int tonightHour(Context c){ return p(c).getInt("tonight_h", 0); }
+    public static int tonightMinute(Context c){ return p(c).getInt("tonight_m", 0); }
+    public static void setTonight(Context c, String isoDate, int h, int m){ p(c).edit().putString("tonight_date", isoDate).putInt("tonight_h", h).putInt("tonight_m", m).apply(); }
+    public static void clearTonight(Context c){ p(c).edit().remove("tonight_date").remove("tonight_h").remove("tonight_m").apply(); }
     public static String pin(Context c){ return p(c).getString("pin", ""); }
     public static void setPin(Context c, String pin){ p(c).edit().putString("pin", pin).apply(); }
     public static String message(Context c){ return p(c).getString("message", "انتهى وقت استخدام التلفزيون"); }

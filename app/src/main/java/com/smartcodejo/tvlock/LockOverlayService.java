@@ -43,7 +43,6 @@ public class LockOverlayService extends Service {
     private TextView hint;
     private final StringBuilder entered = new StringBuilder();
     private boolean forced;
-    private PhoneUnlockServer phoneServer;
     private int sw;
     private int sh;
 
@@ -258,10 +257,6 @@ public class LockOverlayService extends Service {
         if (first != null) first.requestFocus();
         else safe.requestFocus();
 
-        if (phoneServer == null) {
-            phoneServer = new PhoneUnlockServer(this, () -> handler.post(this::unlockSuccess));
-            phoneServer.start();
-        }
 
         handler.removeCallbacks(ticker);
         handler.post(ticker);
@@ -388,10 +383,6 @@ public class LockOverlayService extends Service {
 
     @Override public void onDestroy() {
         handler.removeCallbacks(ticker);
-        if (phoneServer != null) {
-            phoneServer.stop();
-            phoneServer = null;
-        }
         if (overlay != null && wm != null) {
             try { wm.removeView(overlay); } catch (Exception ignored) {}
             overlay = null;

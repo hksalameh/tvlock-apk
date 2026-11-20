@@ -11,6 +11,9 @@ import java.net.Socket;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.LocalDate;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Tiny HTTP server (home LAN) so the PIN can be typed on a phone instead of
@@ -39,6 +42,26 @@ final class PhoneUnlockServer {
     PhoneUnlockServer(Context c, Listener l) {
         ctx = c.getApplicationContext();
         listener = l;
+    }
+
+    private static PhoneUnlockServer instance;
+
+    /** One always-on server for the whole app (hosted by the accessibility service). Safe to call repeatedly. */
+    static synchronized void ensureStarted(Context c) {
+        final Context app = c.getApplicationContext();
+        if (instance == null) {
+            instance = new PhoneUnlockServer(app, () -> {
+                if (ScheduleUtil.shouldLock(app)) {
+                    Prefs.setBypassUntil(app, ScheduleUtil.currentWindowEnd(app));
+                }
+                LockOverlayService.sync(app);
+            });
+        }
+        instance.start();
+    }
+
+    static synchronized void stopInstance() {
+        if (instance != null) { instance.stop(); instance = null; }
     }
 
     synchronized void start() {
@@ -99,7 +122,7 @@ final class PhoneUnlockServer {
         }
         String msg = null;
         boolean ok = false;
-        if (reqLine.startsWith("POST /unlock")) {
+        if (reqLine.startsWith("POST /")) {
             contentLength = Math.min(Math.max(contentLength, 0), MAX_BODY);
             byte[] body = new byte[contentLength];
             int off = 0;
@@ -108,16 +131,46 @@ final class PhoneUnlockServer {
                 if (r < 0) break;
                 off += r;
             }
-            String pin = parsePin(new String(body, 0, off, StandardCharsets.UTF_8));
-            String result = attempt(pin);
-            if ("ok".equals(result)) ok = true;
-            else msg = result;
+            Map<String, String> form = parseForm(new String(body, 0, off, StandardCharsets.UTF_8));
+            String result = attempt(form.containsKey("pin") ? form.get("pin") : "");
+            if (!"ok".equals(result)) {
+                msg = result;
+            } else if (reqLine.startsWith("POST /unlock")) {
+                ok = true;
+                msg = "تم الفتح ✔";
+            } else if (reqLine.startsWith("POST /tonight")) {
+                String t = form.containsKey("time") ? form.get("time") : "";
+                if (t.matches("\\d{1,2}:\\d{2}")) {
+                    int h = Integer.parseInt(t.substring(0, t.indexOf(':')));
+                    int m = Integer.parseInt(t.substring(t.indexOf(':') + 1));
+                    if (h < 24 && m < 60) {
+                        ScheduleUtil.setTonightStart(ctx, h, m);
+                        msg = String.format(java.util.Locale.ROOT, "تم: قفل الليلة فقط الساعة %02d:%02d ✔", h, m);
+                    } else msg = "وقت غير صالح";
+                } else msg = "وقت غير صالح";
+            } else if (reqLine.startsWith("POST /clear")) {
+                ScheduleUtil.clearTonightStart(ctx);
+                msg = "تم إلغاء تعديل الليلة ✔";
+            } else {
+                write(c.getOutputStream(), 404, page("غير موجود", ""));
+                return;
+            }
         } else if (!reqLine.startsWith("GET / ")) {
-            write(c.getOutputStream(), 404, page("غير موجود", false));
+            write(c.getOutputStream(), 404, page("غير موجود", ""));
             return;
         }
-        write(c.getOutputStream(), 200, page(msg, ok));
+        write(c.getOutputStream(), 200, page(msg, status()));
         if (ok) listener.onUnlock();
+    }
+
+    private String status() {
+        LocalDate d = ScheduleUtil.tonightWindowDate(ctx);
+        int[] st = ScheduleUtil.effectiveStart(ctx, d);
+        boolean custom = d.toString().equals(Prefs.tonightDate(ctx));
+        return String.format(java.util.Locale.ROOT, "القفل الليلة يبدأ %02d:%02d%s — الفتح %02d:%02d%s",
+                st[0], st[1], custom ? " (معدّل لهذه الليلة فقط)" : "",
+                Prefs.endHour(ctx), Prefs.endMinute(ctx),
+                ScheduleUtil.shouldLock(ctx) ? " — مقفول الآن" : "");
     }
 
     private synchronized String attempt(String pin) {
@@ -140,16 +193,17 @@ final class PhoneUnlockServer {
         return "PIN غير صحيح";
     }
 
-    private static String parsePin(String body) {
+    private static Map<String, String> parseForm(String body) {
+        Map<String, String> m = new HashMap<>();
         for (String kv : body.split("&")) {
-            if (kv.startsWith("pin=")) {
-                try {
-                    String v = URLDecoder.decode(kv.substring(4), "UTF-8");
-                    return v.length() > 16 ? v.substring(0, 16) : v;
-                } catch (Exception ignored) {}
-            }
+            int i = kv.indexOf('=');
+            if (i <= 0) continue;
+            try {
+                String v = URLDecoder.decode(kv.substring(i + 1), "UTF-8");
+                m.put(kv.substring(0, i), v.length() > 16 ? v.substring(0, 16) : v);
+            } catch (Exception ignored) {}
         }
-        return "";
+        return m;
     }
 
     private static String readLine(InputStream in) throws IOException {
@@ -175,21 +229,24 @@ final class PhoneUnlockServer {
         out.flush();
     }
 
-    private static String page(String msg, boolean ok) {
-        String status = ok ? "<p style='color:#6f6'>تم الفتح ✔</p>"
-                : (msg != null ? "<p style='color:#f88'>" + msg + "</p>" : "");
-        String form = ok ? "" :
-                "<form method='POST' action='/unlock'>"
-                        + "<input name='pin' type='password' inputmode='numeric' autocomplete='off' "
-                        + "autofocus placeholder='PIN' style='font-size:28px;width:100%;padding:12px;"
-                        + "text-align:center;box-sizing:border-box'>"
-                        + "<button style='margin-top:14px;font-size:24px;width:100%;padding:12px'>فتح</button>"
-                        + "</form>";
+    private static String page(String msg, String status) {
+        String m = msg == null ? "" : "<p style='color:" + (msg.contains("✔") ? "#8f8" : "#f88") + "'>" + msg + "</p>";
+        String st = status.isEmpty() ? "" : "<p style='color:#9cf;font-size:15px'>" + status + "</p>";
+        String pin = "<input name='pin' type='password' inputmode='numeric' autocomplete='off' "
+                + "placeholder='PIN' style='font-size:24px;width:100%;padding:10px;text-align:center;box-sizing:border-box;margin-top:8px'>";
+        String btn = "style='margin-top:10px;font-size:20px;width:100%;padding:10px'";
+        String unlock = "<form method='POST' action='/unlock'><h3>🔓 فتح الآن</h3>" + pin
+                + "<button " + btn + ">فتح</button></form>";
+        String tonight = "<form method='POST' action='/tonight'><h3>🌙 قفل الليلة فقط</h3>"
+                + "<input name='time' type='time' value='02:30' style='font-size:24px;width:100%;padding:10px;text-align:center;box-sizing:border-box'>"
+                + pin + "<button " + btn + ">تعيين لهذه الليلة فقط</button></form>"
+                + "<form method='POST' action='/clear'>" + pin + "<button " + btn + ">إلغاء تعديل الليلة</button></form>";
         return "<!doctype html><html lang='ar' dir='rtl'><head><meta charset='utf-8'>"
                 + "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-                + "<title>فتح التلفزيون</title></head>"
-                + "<body style='font-family:sans-serif;background:#031230;color:#fff;max-width:360px;"
-                + "margin:40px auto;padding:0 16px;text-align:center'>"
-                + "<h2>🔒 فتح التلفزيون</h2>" + status + form + "</body></html>";
+                + "<title>TV Lock</title></head>"
+                + "<body style='font-family:sans-serif;background:#031230;color:#fff;max-width:380px;"
+                + "margin:30px auto;padding:0 16px;text-align:center'>"
+                + "<h2>TV Lock</h2>" + m + st + unlock + "<hr style='opacity:.3;margin:24px 0'>" + tonight
+                + "</body></html>";
     }
 }

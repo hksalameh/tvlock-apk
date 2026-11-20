@@ -16,6 +16,7 @@ public class BootReceiver extends BroadcastReceiver {
         // Always rebuild the normal schedule first. A full power cut clears
         // in-memory alarms, so they must be recreated after Android starts.
         ScheduleUtil.reschedule(context);
+        PhoneUnlockServer.ensureStarted(context);
 
         // Try immediately. If the TV framework/overlay manager is not fully
         // ready yet, the retry alarms below will enforce the lock shortly after.

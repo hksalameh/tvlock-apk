@@ -11,11 +11,18 @@ import java.util.Locale;
 
 public class GuardAccessibilityService extends AccessibilityService {
     private long lastGuardLaunch=0L;
+    private long lastScan=0L;
     private boolean uninstallDialogVisible=false;
 
     @Override protected void onServiceConnected(){
         super.onServiceConnected();
+        PhoneUnlockServer.ensureStarted(this);
         LockOverlayService.sync(this);
+    }
+
+    @Override public void onDestroy(){
+        PhoneUnlockServer.stopInstance();
+        super.onDestroy();
     }
 
     @Override public void onAccessibilityEvent(AccessibilityEvent event){
@@ -29,11 +36,15 @@ public class GuardAccessibilityService extends AccessibilityService {
 
         String pkg=event.getPackageName()==null?"":event.getPackageName().toString().toLowerCase(Locale.ROOT);
         String cls=event.getClassName()==null?"":event.getClassName().toString().toLowerCase(Locale.ROOT);
+        // Other screens that can start an uninstall (Play Store, permission controller, TV launchers).
+        boolean otherUninstallSurface = pkg.contains("permissioncontroller") || pkg.contains("vending") ||
+                pkg.contains("launcher") || pkg.contains("tvrecommendations") || pkg.contains("appstore");
         boolean settingsOrInstaller = pkg.contains("settings") || pkg.contains("packageinstaller") ||
-                cls.contains("settings") || cls.contains("uninstall");
+                cls.contains("settings") || cls.contains("uninstall") || otherUninstallSurface;
         // Android TV firmware may lack Device Admin UI. Protect system settings and
         // package installer behind the parent's PIN using the bound accessibility service.
-        if (settingsOrInstaller &&
+        boolean blanket = settingsOrInstaller && !otherUninstallSurface;
+        if (blanket &&
                 (event.getEventType()==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
                  event.getEventType()==AccessibilityEvent.TYPE_WINDOWS_CHANGED)) {
             uninstallDialogVisible=false;
@@ -45,6 +56,11 @@ public class GuardAccessibilityService extends AccessibilityService {
             return;
         }
 
+        if(otherUninstallSurface && event.getEventType()!=AccessibilityEvent.TYPE_VIEW_CLICKED){
+            long t=SystemClock.elapsedRealtime();
+            if(t-lastScan<400) return;
+            lastScan=t;
+        }
         String screen=collectActiveWindowText().toLowerCase(Locale.ROOT);
         boolean target=screen.contains("tv lock") || screen.contains("com.smartcodejo.tvlock");
         boolean uninstall=screen.contains("uninstall") ||

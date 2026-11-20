@@ -6,6 +6,7 @@ import android.content.Intent;
 
 public class AlarmReceiver extends BroadcastReceiver {
     @Override public void onReceive(Context context, Intent intent){
+        PhoneUnlockServer.ensureStarted(context);
         LockOverlayService.sync(context);
         ScheduleUtil.reschedule(context);
     }
