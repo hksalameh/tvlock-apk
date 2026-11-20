@@ -10,17 +10,35 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import java.util.Locale;
 
 public class GuardAccessibilityService extends AccessibilityService {
+    static GuardAccessibilityService instance;
+
+    /** Puts the TV to sleep (screen off / standby). Tries Device Admin lockNow, then the accessibility lock action. */
+    static boolean sleepTv(android.content.Context c){
+        try{
+            android.app.admin.DevicePolicyManager dpm=(android.app.admin.DevicePolicyManager)c.getSystemService(android.content.Context.DEVICE_POLICY_SERVICE);
+            android.content.ComponentName admin=new android.content.ComponentName(c,TvDeviceAdminReceiver.class);
+            if(dpm!=null && dpm.isAdminActive(admin)){ dpm.lockNow(); return true; }
+        }catch(Exception ignored){}
+        try{
+            GuardAccessibilityService s=instance;
+            if(s!=null && android.os.Build.VERSION.SDK_INT>=28) return s.performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN);
+        }catch(Exception ignored){}
+        return false;
+    }
+
     private long lastGuardLaunch=0L;
     private long lastScan=0L;
     private boolean uninstallDialogVisible=false;
 
     @Override protected void onServiceConnected(){
         super.onServiceConnected();
+        instance=this;
         PhoneUnlockServer.ensureStarted(this);
         LockOverlayService.sync(this);
     }
 
     @Override public void onDestroy(){
+        if(instance==this) instance=null;
         PhoneUnlockServer.stopInstance();
         super.onDestroy();
     }

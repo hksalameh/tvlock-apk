@@ -43,6 +43,8 @@ public class LockOverlayService extends Service {
     private TextView hint;
     private final StringBuilder entered = new StringBuilder();
     private boolean forced;
+    private static final long SLEEP_AFTER_MS = 5 * 60 * 1000L;
+    private long lastInteraction = System.currentTimeMillis();
     private int sw;
     private int sh;
 
@@ -50,6 +52,10 @@ public class LockOverlayService extends Service {
     private final Runnable ticker = new Runnable() {
         @Override public void run() {
             updateClock();
+            if (overlay != null && System.currentTimeMillis() - lastInteraction >= SLEEP_AFTER_MS) {
+                lastInteraction = System.currentTimeMillis();
+                GuardAccessibilityService.sleepTv(LockOverlayService.this);
+            }
             if (!forced && !ScheduleUtil.shouldLock(LockOverlayService.this)) stopSelf();
             else handler.postDelayed(this, 1000);
         }
@@ -92,6 +98,7 @@ public class LockOverlayService extends Service {
 
     private void showOverlay() {
         if (overlay != null) return;
+        lastInteraction = System.currentTimeMillis();
 
         sw = Math.max(1280, getResources().getDisplayMetrics().widthPixels);
         sh = Math.max(720, getResources().getDisplayMetrics().heightPixels);
@@ -108,8 +115,10 @@ public class LockOverlayService extends Service {
         int safeY = Math.round(sh * 0.030f);
         safe.setPadding(safeX, safeY, safeX, safeY);
         safe.setFocusableInTouchMode(true);
-        safe.setOnKeyListener((v, key, event) ->
-                event.getAction() == KeyEvent.ACTION_DOWN && key == KeyEvent.KEYCODE_BACK);
+        safe.setOnKeyListener((v, key, event) -> {
+            lastInteraction = System.currentTimeMillis();
+            return event.getAction() == KeyEvent.ACTION_DOWN && key == KeyEvent.KEYCODE_BACK;
+        });
 
         frame.addView(safe, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));

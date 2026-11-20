@@ -141,11 +141,11 @@ final class PhoneUnlockServer {
             } else if (reqLine.startsWith("POST /tonight")) {
                 String t = form.containsKey("time") ? form.get("time") : "";
                 if (t.matches("\\d{1,2}:\\d{2}")) {
-                    int h = Integer.parseInt(t.substring(0, t.indexOf(':')));
-                    int m = Integer.parseInt(t.substring(t.indexOf(':') + 1));
-                    if (h < 24 && m < 60) {
-                        ScheduleUtil.setTonightStart(ctx, h, m);
-                        msg = String.format(java.util.Locale.ROOT, "تم: قفل الليلة فقط الساعة %02d:%02d ✔", h, m);
+                    int th = Integer.parseInt(t.substring(0, t.indexOf(':')));
+                    int tm = Integer.parseInt(t.substring(t.indexOf(':') + 1));
+                    if (th < 24 && tm < 60) {
+                        ScheduleUtil.setTonightStart(ctx, th, tm);
+                        msg = String.format(java.util.Locale.ROOT, "تم: قفل الليلة فقط الساعة %02d:%02d ✔", th, tm);
                     } else msg = "وقت غير صالح";
                 } else msg = "وقت غير صالح";
             } else if (reqLine.startsWith("POST /clear")) {
