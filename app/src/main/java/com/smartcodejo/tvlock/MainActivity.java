@@ -209,19 +209,15 @@ public class MainActivity extends Activity {
 
     private void buildDashboard(){
         authenticated=true; inSettings=false; page=null; hideKeyboard(null); baseRoot();
-        TextView badge=text("HKS",13,Color.WHITE);
-        badge.setTypeface(Typeface.DEFAULT,Typeface.BOLD); badge.setGravity(Gravity.CENTER);
-        badge.setBackground(roundBg(Theme.focus1(this),CYAN,14));
-        LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(dp(60),dp(26)); bp.setMargins(0,dp(4),0,dp(2));
-        root.addView(badge,bp);
+        root.addView(new View(this),new LinearLayout.LayoutParams(1,0,.8f));
 
         android.widget.TextClock clock=new android.widget.TextClock(this);
         clock.setFormat12Hour("h:mm"); clock.setFormat24Hour("h:mm");
         clock.setTextColor(TEXT); clock.setTextSize(84); clock.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
         clock.setGravity(Gravity.CENTER); clock.setIncludeFontPadding(false);
         root.addView(clock,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(112)));
-        android.widget.TextClock date=new android.widget.TextClock(this);
-        date.setFormat12Hour("a  ·  EEEE d MMMM"); date.setFormat24Hour("a  ·  EEEE d MMMM");
+        TextView date=new TextView(this);
+        date.setText(new java.text.SimpleDateFormat("a  ·  EEEE d MMMM",java.util.Locale.forLanguageTag("ar-u-nu-latn")).format(new java.util.Date()));
         date.setTextColor(MUTED); date.setTextSize(17); date.setGravity(Gravity.CENTER);
         root.addView(date,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(30)));
 
@@ -241,6 +237,7 @@ public class MainActivity extends Activity {
         pp.setMargins(0,dp(10),0,dp(26));
         root.addView(pl,pp);
         status=null;
+        root.addView(new View(this),new LinearLayout.LayoutParams(1,0,1.2f));
 
         Button lockNow=iconBtn("🔒","قفل الآن");
         lockNow.setOnClickListener(v->{
@@ -266,7 +263,9 @@ public class MainActivity extends Activity {
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(130),dp(76)); lp.setMargins(dp(10),0,dp(10),0);
             bar.addView(x,lp);
         }
-        root.addView(bar,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams barLp=new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT);
+        barLp.setMargins(0,0,0,dp(8));
+        root.addView(bar,barLp);
 
         if(!Settings.canDrawOverlays(this) || !isAccessibilityEnabled() || !isDeviceAdminActive()){
             TextView warning=note("⚠ بعض صلاحيات الحماية غير مفعّلة. افتح الإعدادات ثم الصلاحيات لإكمالها.");
@@ -392,146 +391,180 @@ public class MainActivity extends Activity {
         return b;
     }
 
+    // ---------- compact settings rows ----------
+    private LinearLayout row(String label,String value,View.OnClickListener l){
+        LinearLayout r=new LinearLayout(this);
+        r.setOrientation(LinearLayout.HORIZONTAL); r.setGravity(Gravity.CENTER_VERTICAL);
+        r.setFocusable(true); r.setClickable(true);
+        r.setPadding(dp(14),0,dp(14),0);
+        GradientDrawable flat=new GradientDrawable(); flat.setColor(Color.argb(46,255,255,255)); flat.setCornerRadius(dp(10));
+        GradientDrawable foc=new GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP,new int[]{Theme.focus1(this),Theme.focus2(this)});
+        foc.setCornerRadius(dp(10)); foc.setStroke(dp(2),CYAN);
+        android.graphics.drawable.StateListDrawable sl=new android.graphics.drawable.StateListDrawable();
+        sl.addState(new int[]{android.R.attr.state_focused},foc);
+        sl.addState(new int[]{android.R.attr.state_pressed},foc);
+        sl.addState(new int[]{},flat);
+        r.setBackground(sl);
+        TextView lb=text(label,16,TEXT); lb.setGravity(Gravity.CENTER_VERTICAL|Gravity.START);
+        r.addView(lb,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f));
+        if(value!=null && !value.isEmpty()){
+            TextView vl=text(value,15,CYAN); vl.setGravity(Gravity.CENTER_VERTICAL|Gravity.END);
+            r.addView(vl,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT));
+        }
+        if(l!=null) r.setOnClickListener(l);
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(44));
+        lp.setMargins(0,dp(3),0,dp(3));
+        root.addView(r,lp);
+        return r;
+    }
+
+    private LinearLayout switchRow(String label,boolean on,View.OnClickListener l){
+        LinearLayout r=row(label,on?"●  شغّال":"○  موقوف",l);
+        TextView v=(TextView)r.getChildAt(1);
+        v.setTextColor(on?Color.rgb(140,240,160):MUTED);
+        return r;
+    }
+
+    private void group(String title){
+        TextView t=text(title,13,MUTED); t.setGravity(Gravity.START);
+        t.setPadding(dp(6),dp(12),dp(6),dp(2));
+        root.addView(t,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
+    }
+
     private void pgTheme(){
-        note("اختر مجموعة الألوان — تنطبق على لوحة التحكم وشاشة القفل");
+        group("اختر مجموعة الألوان — تنطبق على لوحة التحكم وشاشة القفل");
         for(int i=0;i<Theme.NAMES.length;i++){
             final int k=i;
             boolean sel=Theme.idx(this)==i;
-            Button b=button(Theme.ICONS[i]+"  "+Theme.NAMES[i]+(sel?"   ✓":""));
-            if(sel) b.setTextColor(Theme.accent(this));
-            b.setOnClickListener(v->{ Prefs.setTheme(this,k); buildSettings(); });
+            row(Theme.ICONS[i]+"   "+Theme.NAMES[i],sel?"✓":"",v->{ Prefs.setTheme(this,k); buildSettings(); });
         }
     }
 
     private void pgSchedule(){
-        Button enable=toggle("الجدول الليلي",Prefs.enabled(this));
-        enable.setOnClickListener(v->{
+        switchRow("الجدول الليلي",Prefs.enabled(this),v->{
             Prefs.setEnabled(this,!Prefs.enabled(this));
             Prefs.setBypassUntil(this,0);
             ScheduleUtil.reschedule(this);
             LockOverlayService.sync(this);
             buildSettings();
         });
-        Button start=button("بدء القفل:  "+time(Prefs.startHour(this),Prefs.startMinute(this)));
-        start.setOnClickListener(v->showRemoteTimeDialog(true,false));
-        Button end=button("الفتح التلقائي:  "+time(Prefs.endHour(this),Prefs.endMinute(this)));
-        end.setOnClickListener(v->showRemoteTimeDialog(false,false));
+        group("الأوقات العامة");
+        row("بدء القفل",time(Prefs.startHour(this),Prefs.startMinute(this)),v->showRemoteTimeDialog(true,false));
+        row("الفتح التلقائي",time(Prefs.endHour(this),Prefs.endMinute(this)),v->showRemoteTimeDialog(false,false));
         java.time.LocalDate tw=ScheduleUtil.tonightWindowDate(this);
         boolean tonightSet=tw.toString().equals(Prefs.tonightDate(this));
         int[] es=ScheduleUtil.effectiveStart(this,tw);
-        Button tonight=button("🌙 قفل هذه الليلة فقط:  "+time(es[0],es[1])+(tonightSet?"  (معدّل)":""));
-        tonight.setOnClickListener(v->showRemoteTimeDialog(true,true));
-        if(tonightSet){
-            Button undo=button("إلغاء تعديل الليلة");
-            undo.setOnClickListener(v->{ ScheduleUtil.clearTonightStart(this); buildSettings(); });
-        }
-        String ip=localIp();
-        if(ip!=null) note("التحكم من الموبايل (نفس الواي فاي): http://"+ip+":"+PhoneUnlockServer.PORT);
-        section2("أيام العمل");
+        row("🌙 قفل هذه الليلة فقط",time(es[0],es[1])+(tonightSet?"  (معدّل)":""),v->showRemoteTimeDialog(true,true));
+        if(tonightSet) row("إلغاء تعديل الليلة","",v->{ ScheduleUtil.clearTonightStart(this); buildSettings(); });
+
+        group("أيام العمل");
         String[] names={"الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت","الأحد"};
+        String[] shortN={"اث","ثل","أر","خم","جم","سب","أح"};
         LinearLayout days=new LinearLayout(this);
         days.setOrientation(LinearLayout.HORIZONTAL); days.setGravity(Gravity.CENTER);
         for(int i=1;i<=7;i++){
             final int d=i;
-            Button b=buttonSmall((Prefs.dayEnabled(this,d)?"✓ ":"")+names[i-1]);
-            b.setOnClickListener(v->{
-                Prefs.setDayEnabled(this,d,!Prefs.dayEnabled(this,d));
-                ScheduleUtil.reschedule(this); buildSettings();
-            });
-            days.addView(b);
+            boolean on=Prefs.dayEnabled(this,d);
+            TextView c=text(shortN[i-1],15,on?Color.WHITE:MUTED);
+            c.setGravity(Gravity.CENTER); c.setFocusable(true); c.setClickable(true);
+            GradientDrawable fill=new GradientDrawable(); fill.setCornerRadius(dp(10));
+            fill.setColor(on?Theme.focus1(this):Color.argb(46,255,255,255));
+            GradientDrawable foc=new GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP,new int[]{Theme.focus1(this),Theme.focus2(this)});
+            foc.setCornerRadius(dp(10)); foc.setStroke(dp(2),CYAN);
+            android.graphics.drawable.StateListDrawable sl=new android.graphics.drawable.StateListDrawable();
+            sl.addState(new int[]{android.R.attr.state_focused},foc); sl.addState(new int[]{},fill);
+            c.setBackground(sl);
+            c.setOnClickListener(v->{ Prefs.setDayEnabled(this,d,!Prefs.dayEnabled(this,d)); ScheduleUtil.reschedule(this); buildSettings(); });
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(42),1f); lp.setMargins(dp(3),0,dp(3),0);
+            days.addView(c,lp);
         }
-        root.addView(days,new LinearLayout.LayoutParams(Math.min(dp(900),(int)(getResources().getDisplayMetrics().widthPixels*.74f)),dp(46)));
-        section2("وقت لكل يوم");
+        root.addView(days,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        group("وقت مختلف لكل يوم (اختياري)");
         for(int i=1;i<=7;i++){
             final int d=i; final String nm=names[i-1];
-            Button b=button(nm+":  "+time(Prefs.dayStartHour(this,d),Prefs.dayStartMinute(this,d))+" ← "+time(Prefs.dayEndHour(this,d),Prefs.dayEndMinute(this,d))+(Prefs.hasDayTimes(this,d)?"  *":""));
-            b.setOnClickListener(v->editDayTimes(d,nm));
+            row(nm,time(Prefs.dayStartHour(this,d),Prefs.dayStartMinute(this,d))+"  ←  "+time(Prefs.dayEndHour(this,d),Prefs.dayEndMinute(this,d))+(Prefs.hasDayTimes(this,d)?"  *":""),v->editDayTimes(d,nm));
         }
-        Button resetDays=button("إعادة كل الأيام للوقت العام");
-        resetDays.setOnClickListener(v->{ Prefs.clearAllDayTimes(this); ScheduleUtil.reschedule(this); LockOverlayService.sync(this); buildSettings(); });
+        row("إعادة كل الأيام للوقت العام","",v->{ Prefs.clearAllDayTimes(this); ScheduleUtil.reschedule(this); LockOverlayService.sync(this); buildSettings(); });
+        String ip=localIp();
+        if(ip!=null) note("التحكم من الموبايل (نفس الواي فاي): http://"+ip+":"+PhoneUnlockServer.PORT);
     }
 
     private void pgExam(){
-        Button exam=toggle("وضع الامتحانات",Prefs.extraOn(this));
-        exam.setOnClickListener(v->{ Prefs.setExtraOn(this,!Prefs.extraOn(this)); ScheduleUtil.reschedule(this); LockOverlayService.sync(this); buildSettings(); });
-        Button exS=button("بداية:  "+time(Prefs.extraStartHour(this),Prefs.extraStartMinute(this)));
-        exS.setOnClickListener(v->pickTime("بداية وضع الامتحانات",Prefs.extraStartHour(this),Prefs.extraStartMinute(this),(h,m)->{
+        note("قفل يومي إضافي (مثلاً وقت الدراسة) يعمل كل يوم بالإضافة للقفل الليلي");
+        switchRow("وضع الامتحانات",Prefs.extraOn(this),v->{ Prefs.setExtraOn(this,!Prefs.extraOn(this)); ScheduleUtil.reschedule(this); LockOverlayService.sync(this); buildSettings(); });
+        row("يبدأ",time(Prefs.extraStartHour(this),Prefs.extraStartMinute(this)),v->pickTime("بداية وضع الامتحانات",Prefs.extraStartHour(this),Prefs.extraStartMinute(this),(h,m)->{
             Prefs.setExtra(this,Prefs.extraOn(this),h,m,Prefs.extraEndHour(this),Prefs.extraEndMinute(this)); ScheduleUtil.reschedule(this); buildSettings(); }));
-        Button exE=button("نهاية:  "+time(Prefs.extraEndHour(this),Prefs.extraEndMinute(this)));
-        exE.setOnClickListener(v->pickTime("نهاية وضع الامتحانات",Prefs.extraEndHour(this),Prefs.extraEndMinute(this),(h,m)->{
+        row("ينتهي",time(Prefs.extraEndHour(this),Prefs.extraEndMinute(this)),v->pickTime("نهاية وضع الامتحانات",Prefs.extraEndHour(this),Prefs.extraEndMinute(this),(h,m)->{
             Prefs.setExtra(this,Prefs.extraOn(this),Prefs.extraStartHour(this),Prefs.extraStartMinute(this),h,m); ScheduleUtil.reschedule(this); buildSettings(); }));
     }
 
     private void pgSession(){
-        Button ses=toggle("الحد من التشغيل المتواصل",Prefs.sessionOn(this));
-        ses.setOnClickListener(v->{ Prefs.setSessionOn(this,!Prefs.sessionOn(this)); buildSettings(); });
-        Button sl=button("بعد "+Prefs.sessionLimitMin(this)+" دقيقة (اضغط للتغيير: 60/90/120/180)");
-        sl.setOnClickListener(v->{ int c=Prefs.sessionLimitMin(this); Prefs.setSessionLimitMin(this,c<60?60:c<90?90:c<120?120:c<180?180:60); buildSettings(); });
-        Button sb=button("استراحة "+Prefs.sessionBreakMin(this)+" دقيقة (اضغط للتغيير: 10/15/30)");
-        sb.setOnClickListener(v->{ int c=Prefs.sessionBreakMin(this); Prefs.setSessionBreakMin(this,c<15?15:c<30?30:10); buildSettings(); });
-        note("تشغيل اليوم: "+ScreenTracker.format(ScreenTracker.todayMs(this)));
+        note("بعد مدة تشغيل متواصلة، يُقفل التلفزيون استراحة قصيرة تلقائياً");
+        switchRow("الحد من التشغيل المتواصل",Prefs.sessionOn(this),v->{ Prefs.setSessionOn(this,!Prefs.sessionOn(this)); buildSettings(); });
+        row("مدة التشغيل",Prefs.sessionLimitMin(this)+" دقيقة",v->{ int c=Prefs.sessionLimitMin(this); Prefs.setSessionLimitMin(this,c<60?60:c<90?90:c<120?120:c<180?180:60); buildSettings(); });
+        row("مدة الاستراحة",Prefs.sessionBreakMin(this)+" دقيقة",v->{ int c=Prefs.sessionBreakMin(this); Prefs.setSessionBreakMin(this,c<15?15:c<30?30:10); buildSettings(); });
+        row("تشغيل اليوم حتى الآن",ScreenTracker.format(ScreenTracker.todayMs(this)),null);
+        note("اضغط على المدة لتبديلها بين القيم الجاهزة");
     }
 
     private void pgApps(){
-        Button ap=toggle("قفل التطبيقات ("+Prefs.appsBlocked(this).size()+")",Prefs.appsOn(this));
-        ap.setOnClickListener(v->{ Prefs.setAppsOn(this,!Prefs.appsOn(this)); buildSettings(); });
-        Button apPick=button("اختيار التطبيقات"); apPick.setOnClickListener(v->pickApps());
-        Button apS=button("من:  "+time(Prefs.appsStartHour(this),Prefs.appsStartMinute(this)));
-        apS.setOnClickListener(v->pickTime("بداية قفل التطبيقات",Prefs.appsStartHour(this),Prefs.appsStartMinute(this),(h,m)->{
+        note("تطبيقات تُغلق تلقائياً خلال الفترة التي تحددها");
+        switchRow("قفل التطبيقات",Prefs.appsOn(this),v->{ Prefs.setAppsOn(this,!Prefs.appsOn(this)); buildSettings(); });
+        row("التطبيقات المحجوبة",Prefs.appsBlocked(this).size()+" تطبيق",v->pickApps());
+        row("من الساعة",time(Prefs.appsStartHour(this),Prefs.appsStartMinute(this)),v->pickTime("بداية قفل التطبيقات",Prefs.appsStartHour(this),Prefs.appsStartMinute(this),(h,m)->{
             Prefs.setAppsWindow(this,h,m,Prefs.appsEndHour(this),Prefs.appsEndMinute(this)); buildSettings(); }));
-        Button apE=button("إلى:  "+time(Prefs.appsEndHour(this),Prefs.appsEndMinute(this)));
-        apE.setOnClickListener(v->pickTime("نهاية قفل التطبيقات",Prefs.appsEndHour(this),Prefs.appsEndMinute(this),(h,m)->{
+        row("إلى الساعة",time(Prefs.appsEndHour(this),Prefs.appsEndMinute(this)),v->pickTime("نهاية قفل التطبيقات",Prefs.appsEndHour(this),Prefs.appsEndMinute(this),(h,m)->{
             Prefs.setAppsWindow(this,Prefs.appsStartHour(this),Prefs.appsStartMinute(this),h,m); buildSettings(); }));
     }
 
     private void pgUpdate(){
+        row("الإصدار الحالي",currentVersionName(),null);
         int rc=Prefs.updateReadyCode(this);
         if(rc>UpdateChecker.currentCode(this)){
-            Button up=button("⬇ تثبيت التحديث "+Prefs.updateReadyName(this));
-            up.setOnClickListener(v->{ String e=UpdateChecker.install(this); if(e!=null) Toast.makeText(this,e,Toast.LENGTH_LONG).show(); });
+            row("⬇ تثبيت التحديث",Prefs.updateReadyName(this),v->{ String e=UpdateChecker.install(this); if(e!=null) Toast.makeText(this,e,Toast.LENGTH_LONG).show(); });
         }
-        Button chk=button("🔄 فحص التحديثات الآن");
-        chk.setOnClickListener(v->{ UpdateChecker.checkNow(this); Toast.makeText(this,"جارٍ الفحص… ارجع للإعدادات بعد دقيقة",Toast.LENGTH_LONG).show(); });
-        note("الإصدار الحالي: "+currentVersionName()+"  |  تنبيهات تيليجرام وبقية الإعدادات من صفحة الموبايل");
+        row("🔄 فحص التحديثات الآن","",v->{ UpdateChecker.checkNow(this); Toast.makeText(this,"جارٍ الفحص… ارجع بعد دقيقة",Toast.LENGTH_LONG).show(); });
+        note("تنبيهات تيليجرام والنسخ الاحتياطي من صفحة الموبايل");
     }
 
     private void pgProtect(){
-        Button logBtn=button("📋 سجل الأحداث"); logBtn.setOnClickListener(v->showLogDialog());
-        Button pin=button("تغيير PIN"); pin.setOnClickListener(v->changePin());
-        Button msg=button("رسالة شاشة القفل"); msg.setOnClickListener(v->changeMessage());
-        section2("إدارة التطبيق");
-        TextView uninstallNote=note("لحذف TV Lock بشكل مقصود، استخدم هذا الزر وأدخل PIN الصحيح.");
-        uninstallNote.setTextColor(Color.rgb(255,202,150));
-        Button uninstall=button("🗑  حذف التطبيق");
-        uninstall.setOnClickListener(v->{
+        group("الدخول");
+        row("تغيير PIN","",v->changePin());
+        row("رسالة شاشة القفل","",v->changeMessage());
+        row("📋 سجل الأحداث","",v->showLogDialog());
+        group("إدارة التطبيق");
+        LinearLayout un=row("🗑  حذف التطبيق","يحتاج PIN",v->{
             Intent i=new Intent(this,AdminGuardActivity.class);
             i.putExtra("uninstall",true);
             startActivity(i);
         });
+        ((TextView)un.getChildAt(0)).setTextColor(Color.rgb(255,170,130));
     }
 
     private void pgPerms(){
-        Button overlay=button(Settings.canDrawOverlays(this)?"✓ الظهور فوق التطبيقات مفعّل":"تفعيل الظهور فوق التطبيقات");
-        overlay.setOnClickListener(v->startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:"+getPackageName()))));
-        Button acc=button(isAccessibilityEnabled()?"✓ Accessibility مفعّلة":"تفعيل Accessibility");
-        acc.setOnClickListener(v->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
-        Button admin=button(isDeviceAdminActive()?"✓ حماية الحذف مفعّلة":"تفعيل حماية الحذف");
-        admin.setOnClickListener(v->{
+        note("لازم تكون كلها مفعّلة حتى تعمل الحماية بشكل كامل");
+        boolean o=Settings.canDrawOverlays(this);
+        LinearLayout r1=row("الظهور فوق التطبيقات",o?"✓ مفعّل":"⚠ تفعيل",v->startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:"+getPackageName()))));
+        boolean a=isAccessibilityEnabled();
+        LinearLayout r2=row("Accessibility",a?"✓ مفعّل":"⚠ تفعيل",v->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+        boolean ad=isDeviceAdminActive();
+        LinearLayout r3=row("حماية الحذف",ad?"✓ مفعّل":"⚠ تفعيل",v->{
             if(isDeviceAdminActive()) toast("حماية الحذف مفعّلة");
             else requestDeviceAdmin();
         });
-
+        LinearLayout[] rs={r1,r2,r3}; boolean[] ok={o,a,ad};
+        for(int i=0;i<3;i++) ((TextView)rs[i].getChildAt(1)).setTextColor(ok[i]?Color.rgb(140,240,160):Color.rgb(255,202,120));
         if(Build.VERSION.SDK_INT>=31){
             AlarmManager am=(AlarmManager)getSystemService(ALARM_SERVICE);
-            Button alarm=button(am.canScheduleExactAlarms()?"✓ التوقيت الدقيق مفعّل":"تفعيل التوقيت الدقيق");
-            alarm.setOnClickListener(v->{
+            boolean e=am.canScheduleExactAlarms();
+            LinearLayout r4=row("التوقيت الدقيق",e?"✓ مفعّل":"⚠ تفعيل",v->{
                 try { startActivity(new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,Uri.parse("package:"+getPackageName()))); }
-                catch(Exception e){ toast("سيستخدم التطبيق أفضل توقيت متاح على هذه الشاشة."); }
+                catch(Exception ex){ toast("سيستخدم التطبيق أفضل توقيت متاح على هذه الشاشة."); }
             });
+            ((TextView)r4.getChildAt(1)).setTextColor(e?Color.rgb(140,240,160):Color.rgb(255,202,120));
         }
     }
-
-
 
     private void showTempUnlockDialog(){
         LinearLayout box=new LinearLayout(this);
