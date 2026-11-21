@@ -377,21 +377,21 @@ public class MainActivity extends Activity {
 
         // الأزرار
         LinearLayout bar=new LinearLayout(this); bar.setOrientation(LinearLayout.HORIZONTAL); bar.setGravity(Gravity.CENTER);
-        Button lockNow=dashItem(bar,"🔒","قفل الآن",dn);
+        Button lockNow=dashItem(bar,"lock","قفل الآن",dn);
         lockNow.setOnClickListener(v->{
             Prefs.setBypassUntil(this,0);
             Intent i=new Intent(this,LockOverlayService.class).putExtra("force",true);
             if(Build.VERSION.SDK_INT>=26) startForegroundService(i); else startService(i);
         });
-        dashItem(bar,"⏱","فتح مؤقت",dn).setOnClickListener(v->showTempUnlockDialog());
-        dashItem(bar,Prefs.enabled(this)?"⏸":"▶",Prefs.enabled(this)?"إيقاف الجدول":"تشغيل الجدول",dn).setOnClickListener(v->{
+        dashItem(bar,"timer","فتح مؤقت",dn).setOnClickListener(v->showTempUnlockDialog());
+        dashItem(bar,Prefs.enabled(this)?"pause":"play",Prefs.enabled(this)?"إيقاف الجدول":"تشغيل الجدول",dn).setOnClickListener(v->{
             Prefs.setEnabled(this,!Prefs.enabled(this));
             Prefs.setBypassUntil(this,0);
             ScheduleUtil.reschedule(this);
             LockOverlayService.sync(this);
             buildDashboard();
         });
-        dashItem(bar,"⚙","الإعدادات",dn).setOnClickListener(v->{ inSettings=true; page="sched"; buildSettings(); });
+        dashItem(bar,"gear","الإعدادات",dn).setOnClickListener(v->{ inSettings=true; page="sched"; buildSettings(); });
 
         TextView warn=null;
         if(!Settings.canDrawOverlays(this) || !isAccessibilityEnabled() || !isDeviceAdminActive()){
@@ -415,7 +415,7 @@ public class MainActivity extends Activity {
             frame.addView(card,new FrameLayout.LayoutParams(Math.min(dp(760),(int)(sw*.72f)),dp(430),Gravity.CENTER));
         } else {
             LinearLayout col=new LinearLayout(this); col.setOrientation(LinearLayout.VERTICAL); col.setGravity(Gravity.CENTER_HORIZONTAL);
-            col.addView(new View(this),new LinearLayout.LayoutParams(1,0,1f));
+            col.addView(new View(this),new LinearLayout.LayoutParams(1,0,1.5f));
             col.addView(top,new LinearLayout.LayoutParams(-1,-2));
             col.addView(new View(this),new LinearLayout.LayoutParams(1,0,1f));
             if(warn!=null){ LinearLayout.LayoutParams wl=new LinearLayout.LayoutParams(-2,-2); wl.setMargins(0,0,0,dp(12)); col.addView(warn,wl); }
@@ -434,16 +434,17 @@ public class MainActivity extends Activity {
     private Button dashItem(LinearLayout bar,String icon,String label,float dn){
         LinearLayout it=new LinearLayout(this); it.setOrientation(LinearLayout.VERTICAL); it.setGravity(Gravity.CENTER_HORIZONTAL);
         Button b=new Button(this);
-        b.setText(icon); b.setTextSize(LIGHT?28:30); b.setAllCaps(false); b.setFocusable(true);
+        b.setText(""); b.setFocusable(true);
+        b.setForeground(new LineIcon(icon,LIGHT?TEXT:Color.WHITE,Color.WHITE));
         b.setMinHeight(0); b.setMinWidth(0); b.setPadding(0,0,0,0); b.setStateListAnimator(null);
         b.setTextColor(LIGHT?selColors(TEXT):android.content.res.ColorStateList.valueOf(Color.WHITE));
         b.setBackground(keyBg(LIGHT,dn));
-        int sz=LIGHT?dp(76):dp(84);
+        int sz=LIGHT?dp(70):dp(74);
         it.addView(b,new LinearLayout.LayoutParams(sz,sz));
         TextView l=text(label,14,LIGHT?TEXT:Color.argb(220,255,255,255)); l.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams ll=new LinearLayout.LayoutParams(-2,-2); ll.setMargins(0,dp(8),0,0);
         it.addView(l,ll);
-        LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(dp(120),-2); ip.setMargins(dp(LIGHT?6:14),0,dp(LIGHT?6:14),0);
+        LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(dp(100),-2); ip.setMargins(dp(2),0,dp(2),0);
         bar.addView(it,ip);
         return b;
     }
