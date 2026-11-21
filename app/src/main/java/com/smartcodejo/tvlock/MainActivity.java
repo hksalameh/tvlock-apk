@@ -53,8 +53,7 @@ public class MainActivity extends Activity {
 
     @Override public boolean onKeyDown(int keyCode,android.view.KeyEvent e){
         if(keyCode==android.view.KeyEvent.KEYCODE_BACK && authenticated){
-            if(inSettings && page!=null){ page=null; buildSettings(); return true; }
-            if(inSettings){ inSettings=false; buildDashboard(); return true; }
+            if(inSettings){ inSettings=false; page=null; buildDashboard(); return true; }
         }
         return super.onKeyDown(keyCode,e);
     }
@@ -200,43 +199,63 @@ public class MainActivity extends Activity {
         return time(z.getHour(),z.getMinute());
     }
 
+    private Button iconBtn(String icon,String label){
+        Button b=new Button(this);
+        b.setText(icon+"\n"+label); b.setTextSize(14); b.setTextColor(Color.WHITE); b.setAllCaps(false);
+        b.setFocusable(true); b.setMinHeight(0); b.setMinWidth(0); b.setPadding(dp(6),dp(8),dp(6),dp(8));
+        b.setBackground(Theme.focusBg(this,getResources().getDisplayMetrics().density));
+        return b;
+    }
+
+    private String fmtMs(long ms){
+        java.time.ZonedDateTime z=java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneOffset.ofHours(3));
+        return time(z.getHour(),z.getMinute());
+    }
+
     private void buildDashboard(){
         authenticated=true; inSettings=false; page=null; hideKeyboard(null); baseRoot();
-        brandHeader("TV LOCK","حماية ذكية للتلفزيون • hksalameh");
+        TextView badge=text("HKS",13,Color.WHITE);
+        badge.setTypeface(Typeface.DEFAULT,Typeface.BOLD); badge.setGravity(Gravity.CENTER);
+        badge.setBackground(roundBg(Theme.focus1(this),CYAN,14));
+        LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(dp(60),dp(26)); bp.setMargins(0,dp(4),0,dp(2));
+        root.addView(badge,bp);
+
+        android.widget.TextClock clock=new android.widget.TextClock(this);
+        clock.setFormat12Hour("h:mm"); clock.setFormat24Hour("h:mm");
+        clock.setTextColor(TEXT); clock.setTextSize(84); clock.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        clock.setGravity(Gravity.CENTER); clock.setIncludeFontPadding(false);
+        root.addView(clock,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(112)));
+        android.widget.TextClock date=new android.widget.TextClock(this);
+        date.setFormat12Hour("a  ·  EEEE d MMMM"); date.setFormat24Hour("a  ·  EEEE d MMMM");
+        date.setTextColor(MUTED); date.setTextSize(17); date.setGravity(Gravity.CENTER);
+        root.addView(date,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(30)));
 
         boolean locked=ScheduleUtil.shouldLock(this);
         boolean temp=!locked && Prefs.bypassUntil(this)>System.currentTimeMillis();
-        String icon=locked?"🔒":(!Prefs.enabled(this)?"⏸":(temp?"⏱":"🌙"));
-        String title=locked?"التلفزيون مقفول":(!Prefs.enabled(this)?"الجدول متوقف":(temp?"فتح مؤقت":"التلفزيون مفتوح"));
         int[] st=ScheduleUtil.effectiveStart(this,ScheduleUtil.tonightWindowDate(this));
-        String big=locked?"يُفتح تلقائياً الساعة "+fmtMs(ScheduleUtil.currentWindowEnd(this))
-                :(Prefs.enabled(this)?"القفل القادم الساعة "+time(st[0],st[1]):"شغّل الجدول ليبدأ القفل الليلي");
+        String pill;
+        int pc;
+        if(locked){ pill="● مقفول  ·  يُفتح "+fmtMs(ScheduleUtil.currentWindowEnd(this)); pc=Color.rgb(255,178,120); }
+        else if(!Prefs.enabled(this)){ pill="○ الجدول متوقف"; pc=MUTED; }
+        else if(temp){ pill="● فتح مؤقت حتى "+fmtMs(Prefs.bypassUntil(this)); pc=CYAN; }
+        else { pill="● مفتوح  ·  يقفل "+time(st[0],st[1]); pc=CYAN; }
+        TextView pl=text(pill,18,pc); pl.setGravity(Gravity.CENTER);
+        pl.setPadding(dp(22),dp(7),dp(22),dp(7));
+        pl.setBackground(roundBg(Color.argb(60,255,255,255),Color.argb(0,0,0,0),22));
+        LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT);
+        pp.setMargins(0,dp(10),0,dp(26));
+        root.addView(pl,pp);
+        status=null;
 
-        LinearLayout hero=card();
-        hero.setPadding(dp(16),dp(10),dp(16),dp(10));
-        TextView ic=text(icon,40,Color.WHITE); ic.setGravity(Gravity.CENTER);
-        hero.addView(ic,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(58)));
-        TextView ttl=text(title,24,locked?Color.rgb(255,178,120):CYAN); ttl.setTypeface(Typeface.DEFAULT,Typeface.BOLD); ttl.setGravity(Gravity.CENTER);
-        hero.addView(ttl,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(36)));
-        TextView bg=text(big,16,TEXT); bg.setGravity(Gravity.CENTER);
-        hero.addView(bg,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(28)));
-        status=text("",12,MUTED); status.setGravity(Gravity.CENTER);
-        hero.addView(status,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(24)));
-        refreshStatus();
-        int hw=Math.min(dp(780),(int)(getResources().getDisplayMetrics().widthPixels*.62f));
-        LinearLayout.LayoutParams hl=new LinearLayout.LayoutParams(hw,ViewGroup.LayoutParams.WRAP_CONTENT);
-        hl.setMargins(0,dp(4),0,dp(8));
-        root.addView(hero,hl);
-
-        Button lockNow=tile("🔒","قفل الآن","فوراً");
+        Button lockNow=iconBtn("🔒","قفل الآن");
         lockNow.setOnClickListener(v->{
             Prefs.setBypassUntil(this,0);
             Intent i=new Intent(this,LockOverlayService.class).putExtra("force",true);
             if(Build.VERSION.SDK_INT>=26) startForegroundService(i); else startService(i);
         });
-        Button tmp=tile("⏱","فتح مؤقت","15 / 30 / 60 دقيقة");
+        Button tmp=iconBtn("⏱","فتح مؤقت");
         tmp.setOnClickListener(v->showTempUnlockDialog());
-        Button enable=tile(Prefs.enabled(this)?"⏸":"▶","الجدول",Prefs.enabled(this)?"اضغط للإيقاف":"اضغط للتشغيل");
+        Button enable=iconBtn(Prefs.enabled(this)?"⏸":"▶",Prefs.enabled(this)?"إيقاف الجدول":"تشغيل الجدول");
         enable.setOnClickListener(v->{
             Prefs.setEnabled(this,!Prefs.enabled(this));
             Prefs.setBypassUntil(this,0);
@@ -244,10 +263,15 @@ public class MainActivity extends Activity {
             LockOverlayService.sync(this);
             buildDashboard();
         });
-        Button settingsBtn=tile("⚙","الإعدادات","الجدول · المظهر · الحماية");
-        settingsBtn.setOnClickListener(v->{ inSettings=true; page=null; buildSettings(); });
-        cardRow(lockNow,tmp);
-        cardRow(enable,settingsBtn);
+        Button settingsBtn=iconBtn("⚙","الإعدادات");
+        settingsBtn.setOnClickListener(v->{ inSettings=true; page="sched"; buildSettings(); });
+        LinearLayout bar=new LinearLayout(this);
+        bar.setOrientation(LinearLayout.HORIZONTAL); bar.setGravity(Gravity.CENTER);
+        for(Button x:new Button[]{lockNow,tmp,enable,settingsBtn}){
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(130),dp(76)); lp.setMargins(dp(10),0,dp(10),0);
+            bar.addView(x,lp);
+        }
+        root.addView(bar,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT));
 
         if(!Settings.canDrawOverlays(this) || !isAccessibilityEnabled() || !isDeviceAdminActive()){
             TextView warning=note("⚠ بعض صلاحيات الحماية غير مفعّلة. افتح الإعدادات ثم الصلاحيات لإكمالها.");
@@ -292,40 +316,85 @@ public class MainActivity extends Activity {
     private void buildSettings(){
         authenticated=true; inSettings=true; hideKeyboard(null); baseRoot();
         accordion=false;
-        brandHeader("الإعدادات",page==null?"إعدادات TV LOCK":"TV LOCK");
+        if(page==null) page="sched";
 
-        Button back=button("← العودة");
-        back.setOnClickListener(v->{
-            if(page!=null){ page=null; buildSettings(); }
-            else { inSettings=false; buildDashboard(); }
-        });
+        TextView title=text("الإعدادات",22,TEXT); title.setTypeface(Typeface.DEFAULT,Typeface.BOLD); title.setGravity(Gravity.CENTER);
+        root.addView(title,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(40)));
 
-        if(page==null){
-            boolean permsOk=Settings.canDrawOverlays(this) && isAccessibilityEnabled() && isDeviceAdminActive();
-            String ip=localIp();
-            cardRow(card("🕒","الجدول الليلي",time(Prefs.startHour(this),Prefs.startMinute(this))+" ← "+time(Prefs.endHour(this),Prefs.endMinute(this))+" · "+onOff(Prefs.enabled(this)),"sched"),
-                    card("📚","وضع الامتحانات",onOff(Prefs.extraOn(this))+" · "+time(Prefs.extraStartHour(this),Prefs.extraStartMinute(this))+" ← "+time(Prefs.extraEndHour(this),Prefs.extraEndMinute(this)),"exam"));
-            cardRow(card("⏸","حد التشغيل المتواصل",onOff(Prefs.sessionOn(this))+" · "+Prefs.sessionLimitMin(this)+" د ثم "+Prefs.sessionBreakMin(this)+" د","session"),
-                    card("📱","قفل التطبيقات",onOff(Prefs.appsOn(this))+" · "+Prefs.appsBlocked(this).size()+" تطبيق","apps"));
-            cardRow(card("🔐","الحماية والرسالة","PIN · السجل · حذف التطبيق","protect"),
-                    card("✅","الصلاحيات",permsOk?"كلها مفعّلة":"⚠ ناقصة — اضغط للمراجعة","perms"));
-            cardRow(card("🎨","المظهر",Theme.ICONS[Theme.idx(this)]+" "+Theme.NAMES[Theme.idx(this)],"theme"),
-                    card("⬇","التحديث","الإصدار "+currentVersionName()+(Prefs.updateReadyCode(this)>UpdateChecker.currentCode(this)?" · يوجد تحديث!":""),"update"));
-            if(ip!=null) note("التحكم من الموبايل (نفس الواي فاي): http://"+ip+":"+PhoneUnlockServer.PORT);
-        } else {
-            switch(page){
-                case "sched": section2("الجدول الليلي"); pgSchedule(); break;
-                case "exam": section2("وضع الامتحانات"); pgExam(); break;
-                case "session": section2("حد التشغيل المتواصل"); pgSession(); break;
-                case "apps": section2("قفل التطبيقات"); pgApps(); break;
-                case "update": section2("التحديث"); pgUpdate(); break;
-                case "protect": section2("الحماية والرسالة"); pgProtect(); break;
-                case "perms": section2("الصلاحيات"); pgPerms(); break;
-                case "theme": section2("المظهر والألوان"); pgTheme(); break;
-                default: break;
-            }
+        final LinearLayout outer=root;
+        LinearLayout split=new LinearLayout(this);
+        split.setOrientation(LinearLayout.HORIZONTAL);
+        split.setGravity(Gravity.TOP);
+
+        LinearLayout menu=new LinearLayout(this);
+        menu.setOrientation(LinearLayout.VERTICAL);
+        menu.setPadding(dp(6),dp(6),dp(6),dp(6));
+        menu.setBackground(roundBg(Color.argb(90,0,0,0),Color.argb(0,0,0,0),16));
+        String[][] items={
+            {"sched","🕒","الجدول الليلي"},{"exam","📚","الامتحانات"},{"session","⏸","حد التشغيل"},
+            {"apps","📱","قفل التطبيقات"},{"protect","🔐","الحماية والرسالة"},{"perms","✅","الصلاحيات"},
+            {"theme","🎨","المظهر"},{"update","⬇","التحديث"}};
+        Button back=menuItem("←","العودة",false);
+        back.setOnClickListener(v->{ inSettings=false; page=null; buildDashboard(); });
+        menu.addView(back,menuLp());
+        Button selected=null;
+        for(String[] it:items){
+            final String target=it[0];
+            boolean sel=target.equals(page);
+            Button m=menuItem(it[1],it[2],sel);
+            m.setOnClickListener(v->{ page=target; buildSettings(); });
+            menu.addView(m,menuLp());
+            if(sel) selected=m;
         }
+        int sw=getResources().getDisplayMetrics().widthPixels;
+        split.addView(menu,new LinearLayout.LayoutParams(Math.min(dp(300),(int)(sw*.24f)),ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout content=new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL); content.setGravity(Gravity.CENTER_HORIZONTAL);
+        content.setPadding(dp(16),0,dp(8),0);
+        LinearLayout.LayoutParams cl=new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f);
+        split.addView(content,cl);
+        outer.addView(split,new LinearLayout.LayoutParams(Math.min(dp(1100),(int)(sw*.88f)),ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        root=content;
+        switch(page){
+            case "sched": section2("الجدول الليلي"); pgSchedule(); break;
+            case "exam": section2("وضع الامتحانات"); pgExam(); break;
+            case "session": section2("حد التشغيل المتواصل"); pgSession(); break;
+            case "apps": section2("قفل التطبيقات"); pgApps(); break;
+            case "update": section2("التحديث"); pgUpdate(); break;
+            case "protect": section2("الحماية والرسالة"); pgProtect(); break;
+            case "perms": section2("الصلاحيات"); pgPerms(); break;
+            case "theme": section2("المظهر والألوان"); pgTheme(); break;
+            default: break;
+        }
+        root=outer;
         footer();
+        if(selected!=null) selected.requestFocus();
+    }
+
+    private LinearLayout.LayoutParams menuLp(){
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(44));
+        lp.setMargins(0,dp(2),0,dp(2)); return lp;
+    }
+
+    private Button menuItem(String icon,String label,boolean sel){
+        Button b=new Button(this);
+        b.setText(icon+"   "+label); b.setTextSize(15); b.setAllCaps(false); b.setFocusable(true);
+        b.setTextColor(sel?Color.WHITE:MUTED); b.setGravity(Gravity.CENTER_VERTICAL|Gravity.START);
+        b.setMinHeight(0); b.setMinWidth(0); b.setPadding(dp(12),0,dp(12),0);
+        android.graphics.drawable.StateListDrawable d=Theme.focusBg(this,getResources().getDisplayMetrics().density);
+        if(sel){ b.setBackground(Theme.focusBg(this,getResources().getDisplayMetrics().density)); b.setSelected(true); }
+        else { 
+            android.graphics.drawable.StateListDrawable sl=new android.graphics.drawable.StateListDrawable();
+            GradientDrawable focused=new GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP,new int[]{Theme.focus1(this),Theme.focus2(this)});
+            focused.setCornerRadius(dp(12)); focused.setStroke(dp(2),CYAN);
+            GradientDrawable flat=new GradientDrawable(); flat.setColor(Color.TRANSPARENT); flat.setCornerRadius(dp(12));
+            sl.addState(new int[]{android.R.attr.state_focused},focused);
+            sl.addState(new int[]{},flat);
+            b.setBackground(sl);
+        }
+        return b;
     }
 
     private void pgTheme(){
