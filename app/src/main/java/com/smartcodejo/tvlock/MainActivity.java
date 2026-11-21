@@ -105,85 +105,174 @@ public class MainActivity extends Activity {
     }
 
     private void showFirstSetup(){
-        authenticated=false; inSettings=false; baseRoot();
-        brandHeader("TV LOCK","إعداد الحماية لأول مرة");
-        addCardTitle("أنشئ رمز الحماية");
-        note("اختر PIN من 4 إلى 8 أرقام. ستحتاجه لفتح التلفزيون قبل الموعد أو تغيير الإعدادات.");
-        MaskedPinEditText pin=edit("PIN جديد");
-        pin.setSingleLine(true);
-        pin.setImeOptions(EditorInfo.IME_ACTION_DONE);
-        Button save=button("حفظ وبدء الحماية");
-        View.OnClickListener action=v->{
-            String x=pin.getText().toString().trim();
-            if(!x.matches("\\d{4,8}")){ toast("الـ PIN يجب أن يكون من 4 إلى 8 أرقام"); return; }
-            hideKeyboard(pin);
-            Prefs.setPin(this,x);
-            Prefs.setEnabled(this,true);
-            ScheduleUtil.reschedule(this);
-            authenticated=true;
-            buildDashboard();
-            requestDeviceAdmin();
-        };
-        save.setOnClickListener(action);
-        pin.setOnEditorActionListener((v,id,event)->{
-            if(id==EditorInfo.IME_ACTION_DONE){ action.onClick(pin); return true; }
-            return false;
+        authenticated=false; inSettings=false;
+        pinScreen("أنشئ رمز الحماية (4 إلى 8 أرقام)",x->{
+            if(!x.matches("\\d{4,8}")){ toast("الـ PIN يجب أن يكون من 4 إلى 8 أرقام"); return false; }
+            Prefs.setPin(this,x); Prefs.setEnabled(this,true); ScheduleUtil.reschedule(this);
+            authenticated=true; buildDashboard(); requestDeviceAdmin(); return true;
         });
-        pinPad(pin,()->action.onClick(pin));
-        footer();
     }
 
-    private void pinPad(MaskedPinEditText pin,Runnable submit){
+    private void showPinGate(){
+        authenticated=false; inSettings=false;
+        pinScreen("أدخل الرمز",x->{
+            if(Prefs.checkPin(this,x)){ authenticated=true; buildDashboard(); return true; }
+            EventLog.add(this,"PIN غلط في لوحة التحكم"); toast("الرمز غير صحيح"); return false;
+        });
+    }
+
+    private interface PinCheck{ boolean check(String pin); }
+    private MaskedPinEditText activePin;
+
+    /** شاشة الرمز: النمط 0 = A (زجاجي داكن، أزرار دائرية) ، 1 = C (بطاقة فاتحة). */
+    private void pinScreen(String title,PinCheck checker){
+        applyTheme();
+        boolean light=Prefs.pinStyle(this)==1;
+        float dn=getResources().getDisplayMetrics().density;
+        FrameLayout frame=new FrameLayout(this);
+        frame.addView(new PinBackgroundView(this,light),new FrameLayout.LayoutParams(-1,-1));
+
+        int fg=light?Color.rgb(34,40,58):Color.WHITE;
+        int accent=light?Color.rgb(76,110,245):Color.WHITE;
+
+        // ===== لوحة المعلومات (ساعة/تاريخ/حالة) =====
+        LinearLayout info=new LinearLayout(this); info.setOrientation(LinearLayout.VERTICAL);
+        info.setGravity(light?Gravity.CENTER:(Gravity.CENTER_VERTICAL|Gravity.END));
+        android.widget.TextClock clock=new android.widget.TextClock(this);
+        clock.setFormat12Hour("h:mm"); clock.setFormat24Hour("h:mm");
+        clock.setTextSize(light?62:96); clock.setTextColor(Color.WHITE);
+        clock.setTypeface(Typeface.create("sans-serif-thin",Typeface.NORMAL)); clock.setIncludeFontPadding(false);
+        info.addView(clock,new LinearLayout.LayoutParams(-2,-2));
+        TextView date=text(new java.text.SimpleDateFormat("EEEE d MMMM",java.util.Locale.forLanguageTag("ar-u-nu-latn")).format(new java.util.Date()),light?14:17,Color.argb(215,255,255,255));
+        info.addView(date,new LinearLayout.LayoutParams(-2,-2));
+        boolean locked=ScheduleUtil.shouldLock(this);
+        String st=locked?"🔒  التلفزيون مقفل":"🛡  لوحة التحكم محمية";
+        long end=locked?ScheduleUtil.currentWindowEnd(this):0;
+        if(end>System.currentTimeMillis()){
+            java.util.Calendar cal=java.util.Calendar.getInstance(); cal.setTimeInMillis(end);
+            st+="  ·  يفتح "+time(cal.get(java.util.Calendar.HOUR_OF_DAY),cal.get(java.util.Calendar.MINUTE));
+        }
+        TextView stv=text(st,light?13:16,Color.WHITE);
+        stv.setGravity(Gravity.CENTER);
+        if(light){ stv.setBackground(roundBg(Color.argb(60,255,255,255),Color.TRANSPARENT,20)); stv.setPadding(dp(16),dp(6),dp(16),dp(6)); }
+        LinearLayout.LayoutParams sl=new LinearLayout.LayoutParams(-2,-2); sl.setMargins(0,dp(light?22:28),0,0);
+        info.addView(stv,sl);
+
+        // ===== لوحة الأرقام =====
+        LinearLayout pad=new LinearLayout(this); pad.setOrientation(LinearLayout.VERTICAL); pad.setGravity(Gravity.CENTER);
+        TextView tt=text(title,light?19:15,light?fg:Color.argb(210,255,255,255)); tt.setGravity(Gravity.CENTER);
+        if(light) tt.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        pad.addView(tt,new LinearLayout.LayoutParams(-2,-2));
+        MaskedPinEditText pin=new MaskedPinEditText(this);
+        activePin=pin;
+        pin.setMaskColor(accent); pin.setTextSize(26); pin.setGravity(Gravity.CENTER); pin.setBackground(null);
+        pin.setSingleLine(true); pin.setImeOptions(EditorInfo.IME_ACTION_DONE); pin.setPadding(0,0,0,0);
+        pin.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(8)});
+        pad.addView(pin,new LinearLayout.LayoutParams(dp(260),dp(40)));
+        Runnable submit=()->{
+            String x=pin.getText().toString().trim();
+            if(x.isEmpty()) return;
+            hideKeyboard(pin);
+            if(!checker.check(x)) pin.setText("");
+        };
+        pin.setOnEditorActionListener((v,id,e)->{ if(id==EditorInfo.IME_ACTION_DONE){ submit.run(); return true; } return false; });
+
+        int kw=light?dp(78):dp(64), kh=light?dp(50):dp(64);
         String[][] rows={{"1","2","3"},{"4","5","6"},{"7","8","9"},{"⌫","0","✓"}};
+        Button first=null;
         for(String[] r:rows){
-            LinearLayout row=new LinearLayout(this);
-            row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER);
+            LinearLayout row=new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
             for(String k:r){
                 Button b=new Button(this);
-                b.setText(k); b.setTextSize(19); b.setTextColor(Color.WHITE); b.setAllCaps(false);
+                b.setText(k); b.setTextSize(k.equals("⌫")||k.equals("✓")?20:24); b.setAllCaps(false);
+                b.setTypeface(light?Typeface.DEFAULT_BOLD:Typeface.create("sans-serif-light",Typeface.NORMAL));
                 b.setFocusable(true); b.setMinHeight(0); b.setMinWidth(0); b.setPadding(0,0,0,0);
-                b.setBackground(Theme.focusBg(this,getResources().getDisplayMetrics().density));
+                b.setStateListAnimator(null);
+                b.setBackground(keyBg(light,dn));
+                b.setTextColor(new android.content.res.ColorStateList(
+                        new int[][]{{android.R.attr.state_focused},{}},
+                        new int[]{light?Color.WHITE:Color.WHITE, light?fg:Color.WHITE}));
                 b.setOnClickListener(v->{
                     String cur=pin.getText().toString();
                     if(k.equals("⌫")){ if(!cur.isEmpty()) pin.setText(cur.substring(0,cur.length()-1)); }
                     else if(k.equals("✓")) submit.run();
                     else if(cur.length()<8) pin.setText(cur+k);
-                    pin.setSelection(pin.getText().length());
                 });
-                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(78),dp(42));
-                lp.setMargins(dp(4),dp(3),dp(4),dp(3));
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(kw,kh);
+                int g=light?dp(5):dp(9); lp.setMargins(g,light?dp(5):dp(6),g,light?dp(5):dp(6));
                 row.addView(b,lp);
+                if(first==null && k.equals("5")) first=b;
             }
-            root.addView(row,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT));
+            pad.addView(row,new LinearLayout.LayoutParams(-2,-2));
         }
-        note("أدخل الرقم من أزرار الشاشة بالريموت، أو من لوحة مفاتيح الموبايل");
+
+        if(light){
+            // بطاقة بيضاء: يسار بنفسجي للمعلومات + يمين أبيض للأرقام
+            LinearLayout card=new LinearLayout(this); card.setOrientation(LinearLayout.HORIZONTAL);
+            card.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
+            GradientDrawable cb=new GradientDrawable(); cb.setColor(Color.WHITE); cb.setCornerRadius(dp(28));
+            card.setBackground(cb); card.setClipToOutline(true); card.setElevation(dp(16));
+            GradientDrawable lb=new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{Color.rgb(76,110,245),Color.rgb(112,72,232)});
+            float rr=dp(28); lb.setCornerRadii(new float[]{rr,rr,0,0,0,0,rr,rr});
+            LinearLayout left=new LinearLayout(this); left.setOrientation(LinearLayout.VERTICAL); left.setGravity(Gravity.CENTER);
+            left.setBackground(lb);
+            left.addView(info,new LinearLayout.LayoutParams(-2,0,1f));
+            TextView brand=text("HKS  ·  hksalameh",10,Color.argb(160,255,255,255)); brand.setLetterSpacing(.25f); brand.setGravity(Gravity.CENTER);
+            left.addView(brand,new LinearLayout.LayoutParams(-1,dp(34)));
+            card.addView(left,new LinearLayout.LayoutParams(dp(290),-1));
+            card.addView(pad,new LinearLayout.LayoutParams(0,-1,1f));
+            FrameLayout.LayoutParams cl=new FrameLayout.LayoutParams(dp(640),dp(400),Gravity.CENTER);
+            frame.addView(card,cl);
+        } else {
+            LinearLayout split=new LinearLayout(this); split.setOrientation(LinearLayout.HORIZONTAL);
+            split.setLayoutDirection(View.LAYOUT_DIRECTION_LTR); split.setGravity(Gravity.CENTER_VERTICAL);
+            int side=(int)(getResources().getDisplayMetrics().widthPixels*.09f);
+            split.setPadding(side,0,side,0);
+            split.addView(pad,new LinearLayout.LayoutParams(0,-2,1f));
+            split.addView(info,new LinearLayout.LayoutParams(0,-2,1f));
+            frame.addView(split,new FrameLayout.LayoutParams(-1,-1));
+            TextView brand=text("HKS  ·  hksalameh",10,Color.argb(115,255,255,255)); brand.setLetterSpacing(.3f); brand.setGravity(Gravity.CENTER);
+            frame.addView(brand,new FrameLayout.LayoutParams(-1,dp(30),Gravity.BOTTOM));
+        }
+        setContentView(frame);
+        root=null;
+        final Button f0=first; if(f0!=null) f0.post(f0::requestFocus);
     }
 
-    private void showPinGate(){
-        authenticated=false; inSettings=false; baseRoot();
-        brandHeader("TV LOCK","لوحة التحكم محمية");
-        addCardTitle("أدخل PIN للمتابعة");
-        MaskedPinEditText pin=edit("PIN");
-        pin.setSingleLine(true);
-        pin.setImeOptions(EditorInfo.IME_ACTION_DONE);
-        Button enter=button("دخول إلى لوحة التحكم");
-        View.OnClickListener action=v->{
-            if(Prefs.checkPin(this,pin.getText().toString())){
-                hideKeyboard(pin);
-                authenticated=true;
-                buildDashboard();
-            } else {
-                pin.setText("");
-                { EventLog.add(this,"PIN غلط في لوحة التحكم"); toast("PIN غير صحيح"); }
+    private android.graphics.drawable.StateListDrawable keyBg(boolean light,float dn){
+        android.graphics.drawable.StateListDrawable sd=new android.graphics.drawable.StateListDrawable();
+        GradientDrawable on=new GradientDrawable(), off=new GradientDrawable();
+        if(light){
+            on.setCornerRadius(14*dn); off.setCornerRadius(14*dn);
+            on.setColor(Color.rgb(76,110,245)); off.setColor(Color.rgb(238,241,248));
+        } else {
+            on.setShape(GradientDrawable.OVAL); off.setShape(GradientDrawable.OVAL);
+            on.setColor(Color.argb(80,255,255,255)); on.setStroke((int)(2*dn),Color.WHITE);
+            off.setColor(Color.argb(22,255,255,255)); off.setStroke((int)(1.3f*dn),Color.argb(60,255,255,255));
+        }
+        sd.addState(new int[]{android.R.attr.state_focused},on);
+        sd.addState(new int[]{android.R.attr.state_pressed},on);
+        sd.addState(new int[]{},off);
+        return sd;
+    }
+
+    @Override public boolean dispatchKeyEvent(android.view.KeyEvent e){
+        // أرقام من ريموت فيه أرقام أو من لوحة مفاتيح الموبايل
+        if(!authenticated && activePin!=null && activePin.isAttachedToWindow() && e.getAction()==android.view.KeyEvent.ACTION_DOWN && !activePin.hasFocus()){
+            int k=e.getKeyCode();
+            if(k>=android.view.KeyEvent.KEYCODE_0 && k<=android.view.KeyEvent.KEYCODE_9){
+                String cur=activePin.getText().toString();
+                if(cur.length()<8) activePin.setText(cur+(k-android.view.KeyEvent.KEYCODE_0));
+                return true;
             }
-        };
-        enter.setOnClickListener(action);
-        pin.setOnEditorActionListener((v,id,event)->{
-            if(id==EditorInfo.IME_ACTION_DONE){ action.onClick(pin); return true; }
-            return false;
-        });
-        pinPad(pin,()->action.onClick(pin));
-        footer();
+            if(k==android.view.KeyEvent.KEYCODE_DEL){
+                String cur=activePin.getText().toString();
+                if(!cur.isEmpty()) activePin.setText(cur.substring(0,cur.length()-1));
+                return true;
+            }
+        }
+        return super.dispatchKeyEvent(e);
     }
 
     private Button tile(String icon,String title,String summary){
@@ -437,6 +526,12 @@ public class MainActivity extends Activity {
             final int k=i;
             boolean sel=Theme.idx(this)==i;
             row(Theme.ICONS[i]+"   "+Theme.NAMES[i],sel?"✓":"",v->{ Prefs.setTheme(this,k); buildSettings(); });
+        }
+        group("شكل شاشة الرمز");
+        String[] ps={"🌌   داكن زجاجي (A)","☀️   بطاقة فاتحة (C)"};
+        for(int i=0;i<ps.length;i++){
+            final int k=i;
+            row(ps[i],Prefs.pinStyle(this)==i?"✓":"",v->{ Prefs.setPinStyle(this,k); buildSettings(); });
         }
     }
 

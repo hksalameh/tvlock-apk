@@ -40,6 +40,8 @@ public class MaskedPinEditText extends EditText {
         maskPaint.setTextAlign(Paint.Align.CENTER);
     }
 
+    public void setMaskColor(int c){ maskPaint.setColor(c); invalidate(); }
+
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         int count = getText() == null ? 0 : getText().length();
