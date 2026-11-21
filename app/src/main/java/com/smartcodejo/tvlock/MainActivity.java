@@ -184,7 +184,7 @@ public class MainActivity extends Activity {
 
         // ===== لوحة المعلومات (ساعة/تاريخ/حالة) =====
         LinearLayout info=new LinearLayout(this); info.setOrientation(LinearLayout.VERTICAL);
-        info.setGravity(light?Gravity.CENTER:(Gravity.CENTER_VERTICAL|Gravity.END));
+        info.setGravity(Gravity.CENTER);
         android.widget.TextClock clock=new android.widget.TextClock(this);
         clock.setFormat12Hour("h:mm"); clock.setFormat24Hour("h:mm");
         clock.setTextSize(light?62:96); clock.setTextColor(Color.WHITE);
