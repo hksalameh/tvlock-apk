@@ -847,61 +847,81 @@ public class MainActivity extends Activity {
     }
 
     private void pickTime(String title,int h0,int m0,TimeSaver saver){
-        final int[] v={h0%12==0?12:h0%12, m0, h0>=12?1:0}; // ساعة 1-12، دقيقة، 0=ص 1=م
+        applyTheme();
+        final int[] v={h0%12==0?12:h0%12, m0, h0>=12?1:0};
+        float dn=getResources().getDisplayMetrics().density;
+        android.app.Dialog d=new android.app.Dialog(this);
+        d.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+
         LinearLayout box=new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL); box.setGravity(Gravity.CENTER_HORIZONTAL);
-        box.setPadding(dp(18),dp(4),dp(18),dp(4));
+        box.setPadding(dp(22),dp(16),dp(22),dp(16));
+        GradientDrawable bg=new GradientDrawable(); bg.setCornerRadius(dp(22));
+        if(LIGHT) bg.setColor(Color.WHITE); else { bg.setColor(Color.argb(235,24,22,58)); bg.setStroke(dp(1),Color.argb(70,255,255,255)); }
+        box.setBackground(bg);
+
+        TextView tt=text(title,15,TEXT); tt.setTypeface(Typeface.DEFAULT_BOLD); tt.setGravity(Gravity.CENTER);
+        box.addView(tt,new LinearLayout.LayoutParams(-1,-2));
 
         LinearLayout cols=new LinearLayout(this); cols.setOrientation(LinearLayout.HORIZONTAL); cols.setGravity(Gravity.CENTER);
         cols.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
-        TextView hv=text("",42,Color.WHITE), mv=text("",42,Color.WHITE), ap=text("",20,Color.rgb(120,210,255));
-        TextView colon=text(":",40,Color.rgb(120,170,220));
-        for(TextView t:new TextView[]{hv,mv,ap,colon}){ t.setTypeface(Typeface.DEFAULT,Typeface.BOLD); t.setGravity(Gravity.CENTER); }
-        Button hu=dialogButton("▲"), hd=dialogButton("▼"), mu=dialogButton("▲"), md=dialogButton("▼"), apBtn=dialogButton("ص / م");
-        cols.addView(column(hu,hv,hd),new LinearLayout.LayoutParams(dp(110),ViewGroup.LayoutParams.WRAP_CONTENT));
-        cols.addView(colon,new LinearLayout.LayoutParams(dp(24),ViewGroup.LayoutParams.WRAP_CONTENT));
-        cols.addView(column(mu,mv,md),new LinearLayout.LayoutParams(dp(110),ViewGroup.LayoutParams.WRAP_CONTENT));
-        LinearLayout apCol=new LinearLayout(this); apCol.setOrientation(LinearLayout.VERTICAL); apCol.setGravity(Gravity.CENTER);
-        apCol.addView(ap,new LinearLayout.LayoutParams(dp(64),dp(44)));
-        apCol.addView(apBtn,new LinearLayout.LayoutParams(dp(64),dp(40)));
-        LinearLayout.LayoutParams apLp=new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT);
-        apLp.setMargins(dp(14),0,0,0);
-        cols.addView(apCol,apLp);
-        box.addView(cols,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
-        TextView help=text("▲ ▼ للتغيير  •  الدقائق كل 5  •  OK للتأكيد",11,Color.rgb(160,185,215)); help.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams hl=new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(26)); hl.setMargins(0,dp(6),0,0);
-        box.addView(help,hl);
+        TextView hv=text("",28,TEXT), mv=text("",28,TEXT), colon=text(":",26,MUTED);
+        for(TextView t:new TextView[]{hv,mv,colon}){ t.setGravity(Gravity.CENTER); t.setTypeface(Typeface.create("sans-serif-light",Typeface.NORMAL)); }
+        Button hu=smallKey("▲",dn), hd=smallKey("▼",dn), mu=smallKey("▲",dn), md=smallKey("▼",dn), ap=smallKey("",dn);
+        ap.setTextSize(15);
+        cols.addView(timeCol(hu,hv,hd),new LinearLayout.LayoutParams(dp(70),-2));
+        cols.addView(colon,new LinearLayout.LayoutParams(dp(18),-2));
+        cols.addView(timeCol(mu,mv,md),new LinearLayout.LayoutParams(dp(70),-2));
+        LinearLayout.LayoutParams al=new LinearLayout.LayoutParams(dp(54),dp(44)); al.setMargins(dp(12),0,0,0);
+        cols.addView(ap,al);
+        LinearLayout.LayoutParams cl=new LinearLayout.LayoutParams(-2,-2); cl.setMargins(0,dp(10),0,dp(6));
+        box.addView(cols,cl);
 
-        Runnable update=()->{ hv.setText(String.valueOf(v[0])); mv.setText(String.format("%02d",v[1])); ap.setText(v[2]==0?"ص":"م"); };
-        update.run();
-        hu.setOnClickListener(x->{ v[0]=v[0]%12+1; update.run(); });
-        hd.setOnClickListener(x->{ v[0]=(v[0]+10)%12+1; update.run(); });
-        mu.setOnClickListener(x->{ v[1]=(v[1]/5*5+5)%60; update.run(); });
-        md.setOnClickListener(x->{ v[1]=v[1]%5==0?(v[1]+55)%60:v[1]/5*5; update.run(); });
-        apBtn.setOnClickListener(x->{ v[2]=1-v[2]; update.run(); });
+        Runnable upd=()->{ hv.setText(String.valueOf(v[0])); mv.setText(String.format("%02d",v[1])); ap.setText(v[2]==0?"ص":"م"); };
+        upd.run();
+        hu.setOnClickListener(x->{ v[0]=v[0]%12+1; upd.run(); });
+        hd.setOnClickListener(x->{ v[0]=(v[0]+10)%12+1; upd.run(); });
+        mu.setOnClickListener(x->{ v[1]=(v[1]+1)%60; upd.run(); });
+        md.setOnClickListener(x->{ v[1]=(v[1]+59)%60; upd.run(); });
+        ap.setOnClickListener(x->{ v[2]=1-v[2]; upd.run(); });
 
-        android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(this)
-                .setTitle(title).setView(box)
-                .setPositiveButton("حفظ",(d,w)->saver.save((v[0]%12)+(v[2]==1?12:0),v[1]))
-                .setNegativeButton("إلغاء",null).create();
-        dialog.setOnShowListener(x->{
-            hu.requestFocus();
-            if(dialog.getWindow()!=null){
-                int sw=getResources().getDisplayMetrics().widthPixels, sh=getResources().getDisplayMetrics().heightPixels;
-                dialog.getWindow().setLayout(Math.min(dp(520),(int)(sw*.5f)),Math.min(dp(400),(int)(sh*.8f)));
-                dialog.getWindow().setGravity(Gravity.CENTER);
-            }
-        });
-        dialog.show();
+        LinearLayout acts=new LinearLayout(this); acts.setOrientation(LinearLayout.HORIZONTAL); acts.setGravity(Gravity.CENTER);
+        Button save=smallKey("حفظ",dn), cancel=smallKey("إلغاء",dn);
+        save.setTextSize(14); cancel.setTextSize(14);
+        save.setOnClickListener(x->{ d.dismiss(); saver.save((v[0]%12)+(v[2]==1?12:0),v[1]); });
+        cancel.setOnClickListener(x->d.dismiss());
+        LinearLayout.LayoutParams bl=new LinearLayout.LayoutParams(dp(96),dp(38)); bl.setMargins(dp(6),0,dp(6),0);
+        acts.addView(save,bl);
+        LinearLayout.LayoutParams bl2=new LinearLayout.LayoutParams(dp(96),dp(38)); bl2.setMargins(dp(6),0,dp(6),0);
+        acts.addView(cancel,bl2);
+        LinearLayout.LayoutParams ql=new LinearLayout.LayoutParams(-2,-2); ql.setMargins(0,dp(8),0,0);
+        box.addView(acts,ql);
+
+        d.setContentView(box);
+        if(d.getWindow()!=null){
+            d.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+            d.getWindow().setLayout(dp(340),ViewGroup.LayoutParams.WRAP_CONTENT);
+            d.getWindow().setGravity(Gravity.CENTER);
+        }
+        d.setOnShowListener(x->mu.requestFocus());
+        d.show();
     }
 
-    private LinearLayout column(Button up,TextView val,Button down){
+    private Button smallKey(String s,float dn){
+        Button b=new Button(this);
+        b.setText(s); b.setTextSize(13); b.setAllCaps(false); b.setFocusable(true);
+        b.setMinHeight(0); b.setMinWidth(0); b.setPadding(0,0,0,0); b.setStateListAnimator(null);
+        b.setBackground(rowBg(12));
+        b.setTextColor(LIGHT?selColors(TEXT):android.content.res.ColorStateList.valueOf(Color.WHITE));
+        return b;
+    }
+
+    private LinearLayout timeCol(Button up,TextView val,Button down){
         LinearLayout c=new LinearLayout(this); c.setOrientation(LinearLayout.VERTICAL); c.setGravity(Gravity.CENTER);
-        c.addView(up,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(40)));
-        val.setBackground(roundBg(Color.rgb(7,32,68),Color.rgb(73,154,238),12));
-        LinearLayout.LayoutParams vl=new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(70)); vl.setMargins(0,dp(6),0,dp(6));
+        c.addView(up,new LinearLayout.LayoutParams(-1,dp(30)));
+        LinearLayout.LayoutParams vl=new LinearLayout.LayoutParams(-1,dp(48)); vl.setMargins(0,dp(4),0,dp(4));
         c.addView(val,vl);
-        c.addView(down,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(40)));
+        c.addView(down,new LinearLayout.LayoutParams(-1,dp(30)));
         return c;
     }
 
