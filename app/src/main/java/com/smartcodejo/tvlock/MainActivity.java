@@ -194,11 +194,6 @@ public class MainActivity extends Activity {
         return b;
     }
 
-    private String fmtMs(long ms){
-        java.time.ZonedDateTime z=java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneOffset.ofHours(3));
-        return time(z.getHour(),z.getMinute());
-    }
-
     private Button iconBtn(String icon,String label){
         Button b=new Button(this);
         b.setText(icon+"\n"+label); b.setTextSize(14); b.setTextColor(Color.WHITE); b.setAllCaps(false);
