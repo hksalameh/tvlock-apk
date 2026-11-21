@@ -74,7 +74,7 @@ public class AdminGuardActivity extends Activity {
         allow.setTextColor(Color.WHITE);
         allow.setAllCaps(false);
         allow.setFocusable(true);
-        allow.setBackgroundResource(R.drawable.focus_button);
+        allow.setBackground(Theme.focusBg(this,getResources().getDisplayMetrics().density));
         root.addView(allow,new LinearLayout.LayoutParams(Math.min(dp(500),(int)(getResources().getDisplayMetrics().widthPixels*.45f)),dp(56)));
 
         TextView footer=txt("من صنع hksalameh | HKS",13,Color.rgb(146,183,222),false);

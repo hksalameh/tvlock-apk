@@ -32,13 +32,14 @@ public class MainActivity extends Activity {
     private boolean authenticated=false;
     private boolean inSettings=false;
 
-    private final int BLUE=Color.rgb(48,157,255);
-    private final int CYAN=Color.rgb(83,210,255);
+    private int BLUE=Color.rgb(48,157,255);
+    private int CYAN=Color.rgb(83,210,255);
     private final int TEXT=Color.rgb(244,248,255);
     private final int MUTED=Color.rgb(173,201,232);
 
     @Override protected void onCreate(Bundle b){
         super.onCreate(b);
+        applyTheme();
         if(!Prefs.hasPin(this)) showFirstSetup(); else showPinGate();
     }
 
@@ -50,7 +51,18 @@ public class MainActivity extends Activity {
         }
     }
 
+    @Override public boolean onKeyDown(int keyCode,android.view.KeyEvent e){
+        if(keyCode==android.view.KeyEvent.KEYCODE_BACK && authenticated){
+            if(inSettings && page!=null){ page=null; buildSettings(); return true; }
+            if(inSettings){ inSettings=false; buildDashboard(); return true; }
+        }
+        return super.onKeyDown(keyCode,e);
+    }
+
+    private void applyTheme(){ CYAN=Theme.accent(this); BLUE=Theme.focus2(this); }
+
     private void baseRoot(){
+        applyTheme();
         FrameLayout frame=new FrameLayout(this);
         frame.addView(new LockBackgroundView(this),
                 new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT));
@@ -76,7 +88,7 @@ public class MainActivity extends Activity {
         TextView badge=text("HKS",15,Color.WHITE);
         badge.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
         badge.setGravity(Gravity.CENTER);
-        badge.setBackground(roundBg(Color.argb(170,12,75,148),CYAN,14));
+        badge.setBackground(roundBg(Theme.focus1(this),CYAN,14));
         LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(dp(72),dp(32));
         bp.setMargins(0,0,0,dp(4));
         root.addView(badge,bp);
@@ -118,8 +130,34 @@ public class MainActivity extends Activity {
             if(id==EditorInfo.IME_ACTION_DONE){ action.onClick(pin); return true; }
             return false;
         });
+        pinPad(pin,()->action.onClick(pin));
         footer();
-        pin.requestFocus();
+    }
+
+    private void pinPad(MaskedPinEditText pin,Runnable submit){
+        String[][] rows={{"1","2","3"},{"4","5","6"},{"7","8","9"},{"⌫","0","✓"}};
+        for(String[] r:rows){
+            LinearLayout row=new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER);
+            for(String k:r){
+                Button b=new Button(this);
+                b.setText(k); b.setTextSize(19); b.setTextColor(Color.WHITE); b.setAllCaps(false);
+                b.setFocusable(true); b.setMinHeight(0); b.setMinWidth(0); b.setPadding(0,0,0,0);
+                b.setBackground(Theme.focusBg(this,getResources().getDisplayMetrics().density));
+                b.setOnClickListener(v->{
+                    String cur=pin.getText().toString();
+                    if(k.equals("⌫")){ if(!cur.isEmpty()) pin.setText(cur.substring(0,cur.length()-1)); }
+                    else if(k.equals("✓")) submit.run();
+                    else if(cur.length()<8) pin.setText(cur+k);
+                    pin.setSelection(pin.getText().length());
+                });
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(78),dp(42));
+                lp.setMargins(dp(4),dp(3),dp(4),dp(3));
+                row.addView(b,lp);
+            }
+            root.addView(row,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT));
+        }
+        note("أدخل الرقم من أزرار الشاشة بالريموت، أو من لوحة مفاتيح الموبايل");
     }
 
     private void showPinGate(){
@@ -145,44 +183,60 @@ public class MainActivity extends Activity {
             if(id==EditorInfo.IME_ACTION_DONE){ action.onClick(pin); return true; }
             return false;
         });
+        pinPad(pin,()->action.onClick(pin));
         footer();
-        pin.requestFocus();
+    }
+
+    private Button tile(String icon,String title,String summary){
+        Button b=new Button(this);
+        b.setText(icon+"  "+title+"\n"+summary); b.setTextSize(15); b.setTextColor(Color.WHITE); b.setAllCaps(false);
+        b.setFocusable(true); b.setMinHeight(0); b.setMinWidth(0); b.setPadding(dp(12),dp(6),dp(12),dp(6));
+        b.setBackground(Theme.focusBg(this,getResources().getDisplayMetrics().density));
+        return b;
+    }
+
+    private String fmtMs(long ms){
+        java.time.ZonedDateTime z=java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneOffset.ofHours(3));
+        return time(z.getHour(),z.getMinute());
     }
 
     private void buildDashboard(){
-        authenticated=true; inSettings=false; hideKeyboard(null); baseRoot();
+        authenticated=true; inSettings=false; page=null; hideKeyboard(null); baseRoot();
         brandHeader("TV LOCK","حماية ذكية للتلفزيون • hksalameh");
 
-        LinearLayout statusCard=card();
-        TextView stTitle=text(Prefs.enabled(this)?"الحماية مفعّلة":"الحماية متوقفة",19,
-                Prefs.enabled(this)?Color.rgb(111,225,255):Color.rgb(255,178,120));
-        stTitle.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
-        stTitle.setGravity(Gravity.CENTER);
-        statusCard.addView(stTitle,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(30)));
-        status=text("",13,MUTED); status.setGravity(Gravity.CENTER);
-        statusCard.addView(status,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(26)));
+        boolean locked=ScheduleUtil.shouldLock(this);
+        boolean temp=!locked && Prefs.bypassUntil(this)>System.currentTimeMillis();
+        String icon=locked?"🔒":(!Prefs.enabled(this)?"⏸":(temp?"⏱":"🌙"));
+        String title=locked?"التلفزيون مقفول":(!Prefs.enabled(this)?"الجدول متوقف":(temp?"فتح مؤقت":"التلفزيون مفتوح"));
+        int[] st=ScheduleUtil.effectiveStart(this,ScheduleUtil.tonightWindowDate(this));
+        String big=locked?"يُفتح تلقائياً الساعة "+fmtMs(ScheduleUtil.currentWindowEnd(this))
+                :(Prefs.enabled(this)?"القفل القادم الساعة "+time(st[0],st[1]):"شغّل الجدول ليبدأ القفل الليلي");
+
+        LinearLayout hero=card();
+        hero.setPadding(dp(16),dp(10),dp(16),dp(10));
+        TextView ic=text(icon,40,Color.WHITE); ic.setGravity(Gravity.CENTER);
+        hero.addView(ic,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(58)));
+        TextView ttl=text(title,24,locked?Color.rgb(255,178,120):CYAN); ttl.setTypeface(Typeface.DEFAULT,Typeface.BOLD); ttl.setGravity(Gravity.CENTER);
+        hero.addView(ttl,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(36)));
+        TextView bg=text(big,16,TEXT); bg.setGravity(Gravity.CENTER);
+        hero.addView(bg,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(28)));
+        status=text("",12,MUTED); status.setGravity(Gravity.CENTER);
+        hero.addView(status,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(24)));
         refreshStatus();
-        root.addView(statusCard,wideCardParams());
+        int hw=Math.min(dp(780),(int)(getResources().getDisplayMetrics().widthPixels*.62f));
+        LinearLayout.LayoutParams hl=new LinearLayout.LayoutParams(hw,ViewGroup.LayoutParams.WRAP_CONTENT);
+        hl.setMargins(0,dp(4),0,dp(8));
+        root.addView(hero,hl);
 
-        LinearLayout times=new LinearLayout(this);
-        times.setOrientation(LinearLayout.HORIZONTAL);
-        times.setGravity(Gravity.CENTER);
-        times.addView(infoCard("بدء القفل",time(ScheduleUtil.effectiveStart(this,ScheduleUtil.tonightWindowDate(this))[0],ScheduleUtil.effectiveStart(this,ScheduleUtil.tonightWindowDate(this))[1])),weightedCardParams());
-        times.addView(infoCard("الفتح التلقائي",time(ScheduleUtil.effectiveEnd(this,ScheduleUtil.tonightWindowDate(this))[0],ScheduleUtil.effectiveEnd(this,ScheduleUtil.tonightWindowDate(this))[1])),weightedCardParams());
-        root.addView(times,new LinearLayout.LayoutParams(Math.min(dp(700),(int)(getResources().getDisplayMetrics().widthPixels*.58f)),dp(88)));
-
-        section("التحكم السريع");
-        Button lockNow=button("🔒  قفل الآن");
+        Button lockNow=tile("🔒","قفل الآن","فوراً");
         lockNow.setOnClickListener(v->{
             Prefs.setBypassUntil(this,0);
             Intent i=new Intent(this,LockOverlayService.class).putExtra("force",true);
             if(Build.VERSION.SDK_INT>=26) startForegroundService(i); else startService(i);
         });
-
-        Button temp=button("⏱  فتح مؤقت");
-        temp.setOnClickListener(v->showTempUnlockDialog());
-
-        Button enable=button(Prefs.enabled(this)?"⏸  إيقاف الجدول":"▶  تشغيل الجدول");
+        Button tmp=tile("⏱","فتح مؤقت","15 / 30 / 60 دقيقة");
+        tmp.setOnClickListener(v->showTempUnlockDialog());
+        Button enable=tile(Prefs.enabled(this)?"⏸":"▶","الجدول",Prefs.enabled(this)?"اضغط للإيقاف":"اضغط للتشغيل");
         enable.setOnClickListener(v->{
             Prefs.setEnabled(this,!Prefs.enabled(this));
             Prefs.setBypassUntil(this,0);
@@ -190,12 +244,13 @@ public class MainActivity extends Activity {
             LockOverlayService.sync(this);
             buildDashboard();
         });
-
-        Button settingsBtn=button("⚙  الإعدادات");
-        settingsBtn.setOnClickListener(v->{ inSettings=true; buildSettings(); });
+        Button settingsBtn=tile("⚙","الإعدادات","الجدول · المظهر · الحماية");
+        settingsBtn.setOnClickListener(v->{ inSettings=true; page=null; buildSettings(); });
+        cardRow(lockNow,tmp);
+        cardRow(enable,settingsBtn);
 
         if(!Settings.canDrawOverlays(this) || !isAccessibilityEnabled() || !isDeviceAdminActive()){
-            TextView warning=note("⚠ بعض صلاحيات الحماية غير مفعّلة. افتح الإعدادات لإكمالها.");
+            TextView warning=note("⚠ بعض صلاحيات الحماية غير مفعّلة. افتح الإعدادات ثم الصلاحيات لإكمالها.");
             warning.setTextColor(Color.rgb(255,202,120));
         }
         footer();
@@ -216,10 +271,7 @@ public class MainActivity extends Activity {
     }
 
     private Button card(String icon,String title,String summary,String target){
-        Button b=new Button(this);
-        b.setText(icon+"  "+title+"\n"+summary); b.setTextSize(15); b.setTextColor(Color.WHITE); b.setAllCaps(false);
-        b.setFocusable(true); b.setMinHeight(0); b.setMinWidth(0); b.setPadding(dp(12),dp(6),dp(12),dp(6));
-        b.setBackgroundResource(R.drawable.focus_button);
+        Button b=tile(icon,title,summary);
         b.setOnClickListener(v->{ page=target; buildSettings(); });
         return b;
     }
@@ -257,7 +309,8 @@ public class MainActivity extends Activity {
                     card("📱","قفل التطبيقات",onOff(Prefs.appsOn(this))+" · "+Prefs.appsBlocked(this).size()+" تطبيق","apps"));
             cardRow(card("🔐","الحماية والرسالة","PIN · السجل · حذف التطبيق","protect"),
                     card("✅","الصلاحيات",permsOk?"كلها مفعّلة":"⚠ ناقصة — اضغط للمراجعة","perms"));
-            cardRow(card("⬇","التحديث","الإصدار "+currentVersionName()+(Prefs.updateReadyCode(this)>UpdateChecker.currentCode(this)?" · يوجد تحديث!":""),"update"),null);
+            cardRow(card("🎨","المظهر",Theme.ICONS[Theme.idx(this)]+" "+Theme.NAMES[Theme.idx(this)],"theme"),
+                    card("⬇","التحديث","الإصدار "+currentVersionName()+(Prefs.updateReadyCode(this)>UpdateChecker.currentCode(this)?" · يوجد تحديث!":""),"update"));
             if(ip!=null) note("التحكم من الموبايل (نفس الواي فاي): http://"+ip+":"+PhoneUnlockServer.PORT);
         } else {
             switch(page){
@@ -268,10 +321,22 @@ public class MainActivity extends Activity {
                 case "update": section2("التحديث"); pgUpdate(); break;
                 case "protect": section2("الحماية والرسالة"); pgProtect(); break;
                 case "perms": section2("الصلاحيات"); pgPerms(); break;
+                case "theme": section2("المظهر والألوان"); pgTheme(); break;
                 default: break;
             }
         }
         footer();
+    }
+
+    private void pgTheme(){
+        note("اختر مجموعة الألوان — تنطبق على لوحة التحكم وشاشة القفل");
+        for(int i=0;i<Theme.NAMES.length;i++){
+            final int k=i;
+            boolean sel=Theme.idx(this)==i;
+            Button b=button(Theme.ICONS[i]+"  "+Theme.NAMES[i]+(sel?"   ✓":""));
+            if(sel) b.setTextColor(Theme.accent(this));
+            b.setOnClickListener(v->{ Prefs.setTheme(this,k); buildSettings(); });
+        }
     }
 
     private void pgSchedule(){
@@ -623,7 +688,7 @@ public class MainActivity extends Activity {
         LinearLayout c=new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL); c.setGravity(Gravity.CENTER);
         c.setPadding(dp(14),dp(8),dp(14),dp(8));
-        c.setBackground(roundBg(Color.argb(125,6,30,66),Color.argb(155,77,167,255),14));
+        c.setBackground(roundBg(Theme.card(this,150),Theme.accent(this,150),14));
         return c;
     }
 
@@ -653,7 +718,7 @@ public class MainActivity extends Activity {
 
     private void addCardTitle(String s){
         TextView t=text(s,17,TEXT); t.setTypeface(Typeface.DEFAULT,Typeface.BOLD); t.setGravity(Gravity.CENTER);
-        t.setBackground(roundBg(Color.argb(125,7,37,76),Color.argb(150,79,170,255),14));
+        t.setBackground(roundBg(Theme.card(this,150),Theme.accent(this,150),14));
         t.setPadding(dp(14),dp(7),dp(14),dp(7));
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(Math.min(dp(520),(int)(getResources().getDisplayMetrics().widthPixels*.45f)),dp(46));
         lp.setMargins(0,dp(3),0,dp(5)); root.addView(t,lp);
@@ -719,7 +784,7 @@ public class MainActivity extends Activity {
         Button b=new Button(this);
         b.setText(s); b.setTextSize(14); b.setTextColor(Color.WHITE); b.setAllCaps(false); b.setFocusable(true);
         b.setMinHeight(0); b.setMinWidth(0); b.setPadding(dp(10),0,dp(10),0);
-        b.setBackgroundResource(R.drawable.focus_button);
+        b.setBackground(Theme.focusBg(this,getResources().getDisplayMetrics().density));
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(Math.min(dp(500),(int)(getResources().getDisplayMetrics().widthPixels*.44f)),dp(46));
         lp.setMargins(0,dp(3),0,dp(3)); root.addView(b,lp); return b;
     }
@@ -728,7 +793,7 @@ public class MainActivity extends Activity {
         Button b=new Button(this);
         b.setText(s); b.setTextSize(10); b.setTextColor(Color.WHITE); b.setAllCaps(false); b.setFocusable(true);
         b.setMinHeight(0); b.setMinWidth(0); b.setPadding(0,0,0,0);
-        b.setBackgroundResource(R.drawable.focus_button);
+        b.setBackground(Theme.focusBg(this,getResources().getDisplayMetrics().density));
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(40),1);
         lp.setMargins(dp(2),0,dp(2),0); b.setLayoutParams(lp); return b;
     }
@@ -741,7 +806,7 @@ public class MainActivity extends Activity {
     private Button dialogButton(String s){
         Button b=new Button(this);
         b.setText(s); b.setTextSize(13); b.setTextColor(Color.WHITE); b.setAllCaps(false); b.setFocusable(true);
-        b.setMinHeight(0); b.setPadding(0,0,0,0); b.setBackgroundResource(R.drawable.focus_button); return b;
+        b.setMinHeight(0); b.setPadding(0,0,0,0); b.setBackground(Theme.focusBg(this,getResources().getDisplayMetrics().density)); return b;
     }
 
     private void footer(){

@@ -25,7 +25,7 @@ public class LockBackgroundView extends View {
         if(w<=0||h<=0) return;
 
         p.setShader(new LinearGradient(0,0,0,h,
-                new int[]{Color.rgb(1,8,28),Color.rgb(6,27,68),Color.rgb(22,64,118),Color.rgb(36,48,103),Color.rgb(6,18,43)},
+                Theme.bg(getContext()),
                 new float[]{0f,.34f,.55f,.68f,1f}, Shader.TileMode.CLAMP));
         c.drawRect(0,0,w,h,p);
         p.setShader(null);
@@ -50,7 +50,7 @@ public class LockBackgroundView extends View {
         p.setAlpha(255);
 
         p.setShader(new LinearGradient(0,0,w,0,
-                new int[]{Color.TRANSPARENT,Color.argb(90,26,179,214),Color.argb(115,97,92,224),Color.argb(80,219,86,163),Color.TRANSPARENT},
+                new int[]{Color.TRANSPARENT,Theme.aurora(getContext(),0,90),Theme.aurora(getContext(),1,115),Theme.aurora(getContext(),2,80),Color.TRANSPARENT},
                 null,Shader.TileMode.CLAMP));
         path.reset();
         path.moveTo(0,h*.33f);
@@ -63,7 +63,7 @@ public class LockBackgroundView extends View {
         c.drawPath(path,p);
         p.setShader(null);
 
-        p.setColor(Color.rgb(25,45,82));
+        p.setColor(Theme.mountain(getContext()));
         path.reset();
         path.moveTo(0,h*.67f);
         path.lineTo(0,h*.57f);
@@ -80,7 +80,7 @@ public class LockBackgroundView extends View {
         path.close();
         c.drawPath(path,p);
 
-        p.setColor(Color.argb(145,105,152,205));
+        p.setColor(Theme.accent(getContext(),120));
         path.reset();
         path.moveTo(w*.235f,h*.505f); path.lineTo(w*.29f,h*.44f); path.lineTo(w*.335f,h*.502f);
         path.lineTo(w*.305f,h*.488f); path.lineTo(w*.286f,h*.474f); path.lineTo(w*.270f,h*.491f); path.close();
@@ -90,7 +90,7 @@ public class LockBackgroundView extends View {
         path.lineTo(w*.785f,h*.472f); path.lineTo(w*.768f,h*.454f); path.lineTo(w*.753f,h*.476f); path.close();
         c.drawPath(path,p);
 
-        p.setColor(Color.rgb(5,17,38));
+        p.setColor(Theme.bgAt(getContext(),4));
         path.reset();
         path.moveTo(0,h*.73f);
         path.lineTo(0,h*.64f);
@@ -108,26 +108,26 @@ public class LockBackgroundView extends View {
         for(int i=0;i<40;i++){
             float x=(i+.4f)/40f*w;
             float y=h*(.704f+((i%3)*.0018f));
-            p.setColor((i%4==0)?Color.rgb(255,177,78):Color.rgb(95,180,255));
+            p.setColor((i%4==0)?Color.rgb(255,177,78):Theme.accent(getContext()));
             p.setAlpha(125+(i%4)*28);
             c.drawCircle(x,y,1.6f+(i%3)*.55f,p);
         }
         p.setAlpha(255);
 
         p.setShader(new LinearGradient(0,h*.70f,0,h,
-                new int[]{Color.rgb(12,58,103),Color.rgb(7,38,74),Color.rgb(2,13,31)},
+                new int[]{Theme.bgAt(getContext(),2),Theme.bgAt(getContext(),1),Theme.bgAt(getContext(),0)},
                 null,Shader.TileMode.CLAMP));
         c.drawRect(0,h*.70f,w,h,p);
         p.setShader(null);
 
-        p.setColor(Color.argb(125,82,177,255));
+        p.setColor(Theme.accent(getContext(),125));
         c.drawRect(0,h*.704f,w,h*.707f,p);
 
         for(int i=0;i<34;i++){
             float x=(i+.5f)/34f*w;
             float top=h*.713f;
             float len=h*(.018f+(i%6)*.010f);
-            p.setColor(i%4==0?Color.rgb(255,170,79):Color.rgb(68,155,238));
+            p.setColor(i%4==0?Color.rgb(255,170,79):Theme.accent(getContext()));
             p.setAlpha(18+(i%4)*12);
             c.drawRect(x-1.2f,top,x+1.2f,top+len,p);
         }

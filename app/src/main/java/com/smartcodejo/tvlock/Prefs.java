@@ -83,6 +83,9 @@ public final class Prefs {
         if(!plain.isEmpty()) setPin(c, plain);
     }
 
+    public static int theme(Context c){ return p(c).getInt("theme", 0); }
+    public static void setTheme(Context c, int t){ p(c).edit().putInt("theme", t).apply(); }
+
     // ---- Forced lock (remote "lock now", session break). Beats the schedule and temporary unlocks. ----
     public static long forceLockUntil(Context c){ return p(c).getLong("force_lock_until", 0L); }
     public static void setForceLockUntil(Context c, long ms){ p(c).edit().putLong("force_lock_until", ms).apply(); }

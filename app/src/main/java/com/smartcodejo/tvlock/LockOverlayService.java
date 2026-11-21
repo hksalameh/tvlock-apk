@@ -208,7 +208,7 @@ public class LockOverlayService extends Service {
             b.setMinWidth(0);
             b.setMinHeight(0);
             b.setPadding(0, 0, 0, 0);
-            b.setBackgroundResource(R.drawable.focus_button);
+            b.setBackground(Theme.focusBg(this,getResources().getDisplayMetrics().density));
 
             GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
             lp.width = bw;
