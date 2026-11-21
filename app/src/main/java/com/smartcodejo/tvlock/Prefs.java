@@ -25,6 +25,7 @@ public final class Prefs {
         p(c).edit().putBoolean("dt_set_"+iso, true).putInt("dt_sh_"+iso, sh).putInt("dt_sm_"+iso, sm)
                 .putInt("dt_eh_"+iso, eh).putInt("dt_em_"+iso, em).apply();
     }
+    public static void clearDayTimes(Context c, int iso){ p(c).edit().remove("dt_set_"+iso).apply(); }
     public static void clearAllDayTimes(Context c){
         SharedPreferences.Editor e=p(c).edit();
         for(int i=1;i<=7;i++) e.remove("dt_set_"+i);

@@ -43,12 +43,12 @@ final class UpdateChecker {
         new Thread(() -> {
             try {
                 Prefs.setUpdateLastCheck(c, System.currentTimeMillis());
-                JSONObject j = new JSONObject(fetch(BASE + "version.json").toString("UTF-8"));
+                JSONObject j = new JSONObject(fetch(BASE + "version.json?t=" + System.currentTimeMillis()).toString("UTF-8"));
                 int code = j.getInt("versionCode");
                 String name = j.optString("versionName", "?");
                 if (code <= currentCode(c)) { Prefs.setUpdateReady(c, 0, ""); return; }
                 if (Prefs.updateReadyCode(c) == code && apkFile(c).exists()) return;
-                byte[] raw = Base64.decode(fetch(BASE + "TVLock.apk.b64").toString("US-ASCII").trim(), Base64.DEFAULT);
+                byte[] raw = Base64.decode(fetch(BASE + "TVLock.apk.b64?t=" + System.currentTimeMillis()).toString("US-ASCII").trim(), Base64.DEFAULT);
                 if (raw.length < 20_000) return;
                 try (OutputStream o = new FileOutputStream(apkFile(c))) { o.write(raw); }
                 Prefs.setUpdateReady(c, code, name);
