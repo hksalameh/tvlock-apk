@@ -207,6 +207,7 @@ public class MainActivity extends Activity {
 
         Button back=button("← العودة");
         back.setOnClickListener(v->{ inSettings=false; buildDashboard(); });
+        mainRoot=root; bodies.clear(); heads.clear(); accordion=true;
 
         section("الجدول اليومي");
         Button start=button("بدء القفل:  "+time(Prefs.startHour(this),Prefs.startMinute(this)));
@@ -334,6 +335,7 @@ public class MainActivity extends Activity {
             startActivity(i);
         });
 
+        accordion=false; root=mainRoot;
         footer();
     }
 
@@ -598,7 +600,38 @@ public class MainActivity extends Activity {
         return t;
     }
 
+    // ---- collapsible sections (settings screen) ----
+    private boolean accordion=false;
+    private LinearLayout mainRoot;
+    private static String openSec="الجدول اليومي";
+    private final java.util.LinkedHashMap<String,LinearLayout> bodies=new java.util.LinkedHashMap<>();
+    private final java.util.LinkedHashMap<String,Button> heads=new java.util.LinkedHashMap<>();
+
     private void section(String s){
+        if(accordion){
+            if(mainRoot==null) mainRoot=root;
+            root=mainRoot;
+            final boolean open=s.equals(openSec);
+            final Button h=button((open?"▾  ":"◂  ")+s);
+            h.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+            h.setTextColor(CYAN);
+            LinearLayout body=new LinearLayout(this);
+            body.setOrientation(LinearLayout.VERTICAL); body.setGravity(Gravity.CENTER_HORIZONTAL);
+            body.setVisibility(open?View.VISIBLE:View.GONE);
+            mainRoot.addView(body,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
+            bodies.put(s,body); heads.put(s,h);
+            h.setOnClickListener(v->{
+                boolean wasOpen=s.equals(openSec);
+                openSec=wasOpen?"":s;
+                for(java.util.Map.Entry<String,LinearLayout> e:bodies.entrySet()){
+                    boolean o=e.getKey().equals(openSec);
+                    e.getValue().setVisibility(o?View.VISIBLE:View.GONE);
+                    heads.get(e.getKey()).setText((o?"▾  ":"◂  ")+e.getKey());
+                }
+            });
+            root=body;
+            return;
+        }
         TextView t=text(s,15,CYAN); t.setTypeface(Typeface.DEFAULT,Typeface.BOLD); t.setGravity(Gravity.CENTER);
         t.setPadding(0,dp(8),0,dp(3));
         root.addView(t,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(34)));
