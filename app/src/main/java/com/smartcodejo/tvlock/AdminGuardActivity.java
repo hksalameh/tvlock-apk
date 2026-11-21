@@ -31,58 +31,46 @@ public class AdminGuardActivity extends Activity {
         super.onCreate(b);
         uninstallFlow=getIntent()!=null && getIntent().getBooleanExtra("uninstall_flow",false);
 
+        boolean light=Prefs.pinStyle(this)==1;
+        float dn=getResources().getDisplayMetrics().density;
+        int fg=light?Color.rgb(34,40,58):Color.WHITE;
+        int muted=light?Color.rgb(100,108,130):Color.rgb(200,212,236);
+
         FrameLayout frame=new FrameLayout(this);
-        frame.addView(new LockBackgroundView(this), new FrameLayout.LayoutParams(-1,-1));
+        frame.addView(new PinBackgroundView(this,light), new FrameLayout.LayoutParams(-1,-1));
 
         LinearLayout root=new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER);
-        root.setPadding(dp(40),dp(26),dp(40),dp(26));
-        frame.addView(root,new FrameLayout.LayoutParams(-1,-1));
+        root.setPadding(dp(28),dp(22),dp(28),dp(22));
+        if(light){
+            GradientDrawable cb=new GradientDrawable(); cb.setColor(Color.WHITE); cb.setCornerRadius(dp(28));
+            root.setBackground(cb); root.setElevation(dp(16));
+            frame.addView(root,new FrameLayout.LayoutParams(dp(460),ViewGroup.LayoutParams.WRAP_CONTENT,Gravity.CENTER));
+        } else {
+            frame.addView(root,new FrameLayout.LayoutParams(-1,-1));
+        }
 
-        TextView badge=txt("HKS",16,Color.WHITE,true);
-        badge.setGravity(Gravity.CENTER);
-        badge.setBackground(roundBg(Color.argb(190,12,75,148),CYAN,14));
-        root.addView(badge,new LinearLayout.LayoutParams(dp(76),dp(34)));
-
-        TextView title=txt(uninstallFlow?"تأكيد حذف TV LOCK":"حماية TV LOCK",28,Color.WHITE,true);
+        TextView title=txt(uninstallFlow?"🗑  تأكيد حذف TV Lock":"🔒  الإعدادات محمية",22,fg,true);
         title.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams tp=new LinearLayout.LayoutParams(-1,dp(48)); tp.setMargins(0,dp(8),0,0);
-        root.addView(title,tp);
-
-        String noteText=uninstallFlow
-                ?"أدخل PIN للسماح بحذف التطبيق. بدون الرمز لن يتم إلغاء الحماية."
-                :"يلزم إدخال PIN قبل السماح بتعديل الإعدادات الحساسة";
-        TextView note=txt(noteText,15,Color.rgb(185,211,240),false);
+        root.addView(title,new LinearLayout.LayoutParams(-1,-2));
+        TextView note=txt(uninstallFlow?"أدخل الرمز للسماح بحذف التطبيق":"أدخل الرمز لفتح الإعدادات لمدة دقيقتين",14,muted,false);
         note.setGravity(Gravity.CENTER);
-        root.addView(note,new LinearLayout.LayoutParams(Math.min(dp(760),(int)(getResources().getDisplayMetrics().widthPixels*.66f)),dp(58)));
+        LinearLayout.LayoutParams np=new LinearLayout.LayoutParams(-1,-2); np.setMargins(0,dp(6),0,0);
+        root.addView(note,np);
 
         MaskedPinEditText pin=new MaskedPinEditText(this);
-        pin.setHint("PIN");
-        pin.setHintTextColor(Color.rgb(155,180,210));
-        pin.setTextSize(21);
-        pin.setGravity(Gravity.CENTER);
-        pin.setSingleLine(true);
+        pin.setMaskColor(fg); pin.setTextSize(24); pin.setGravity(Gravity.CENTER);
+        pin.setSingleLine(true); pin.setBackground(null); pin.setPadding(0,0,0,0);
         pin.setImeOptions(EditorInfo.IME_ACTION_DONE);
-        pin.setBackground(roundBg(Color.argb(180,7,32,68),Color.rgb(73,154,238),16));
-        LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(Math.min(dp(420),(int)(getResources().getDisplayMetrics().widthPixels*.38f)),dp(58));
-        pp.setMargins(0,dp(8),0,dp(10)); root.addView(pin,pp);
-
-        Button allow=new Button(this);
-        allow.setText(uninstallFlow?"السماح بالحذف":"السماح لمدة دقيقتين");
-        allow.setTextSize(17);
-        allow.setTextColor(Color.WHITE);
-        allow.setAllCaps(false);
-        allow.setFocusable(true);
-        allow.setBackground(Theme.focusBg(this,getResources().getDisplayMetrics().density));
-        root.addView(allow,new LinearLayout.LayoutParams(Math.min(dp(500),(int)(getResources().getDisplayMetrics().widthPixels*.45f)),dp(56)));
-
-        TextView footer=txt("من صنع hksalameh | HKS",13,Color.rgb(146,183,222),false);
-        footer.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams fp=new LinearLayout.LayoutParams(-1,dp(42)); fp.setMargins(0,dp(12),0,0); root.addView(footer,fp);
+        pin.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(8)});
+        LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(dp(240),dp(40)); pp.setMargins(0,dp(8),0,dp(6));
+        root.addView(pin,pp);
 
         Runnable verify=()->{
-            if(Prefs.checkPin(this,pin.getText().toString())){
+            String x=pin.getText().toString();
+            if(x.isEmpty()) return;
+            if(Prefs.checkPin(this,x)){
                 hideKeyboard(pin);
                 Prefs.setAdminBypassUntil(this,System.currentTimeMillis()+2*60*1000L);
                 EventLog.add(this,uninstallFlow?"PIN صحيح: السماح بالحذف":"PIN صحيح: سماح دقيقتين للإعدادات");
@@ -95,15 +83,66 @@ public class AdminGuardActivity extends Activity {
             }else{
                 pin.setText("");
                 EventLog.add(this,"PIN غلط في شاشة الحماية");
-                Toast.makeText(this,"PIN غير صحيح",Toast.LENGTH_SHORT).show();
+                Toast.makeText(this,"الرمز غير صحيح",Toast.LENGTH_SHORT).show();
             }
         };
-        allow.setOnClickListener(v->verify.run());
         pin.setOnEditorActionListener((v,id,event)->{
             if(id==EditorInfo.IME_ACTION_DONE){ verify.run(); return true; }
             return false;
         });
-        pin.requestFocus();
+
+        String[][] rows={{"1","2","3"},{"4","5","6"},{"7","8","9"},{"⌫","0","✓"}};
+        Button five=null;
+        for(String[] r:rows){
+            LinearLayout row=new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setLayoutDirection(android.view.View.LAYOUT_DIRECTION_LTR);
+            for(String k:r){
+                Button b=new Button(this);
+                b.setText(k); b.setTextSize(k.equals("⌫")||k.equals("✓")?18:22); b.setAllCaps(false);
+                b.setFocusable(true); b.setMinHeight(0); b.setMinWidth(0); b.setPadding(0,0,0,0); b.setStateListAnimator(null);
+                b.setBackground(keyBg(light,dn));
+                b.setTextColor(new android.content.res.ColorStateList(
+                        new int[][]{{android.R.attr.state_focused},{}},new int[]{Color.WHITE,fg}));
+                b.setOnClickListener(v->{
+                    String cur=pin.getText().toString();
+                    if(k.equals("⌫")){ if(!cur.isEmpty()) pin.setText(cur.substring(0,cur.length()-1)); }
+                    else if(k.equals("✓")) verify.run();
+                    else if(cur.length()<8) pin.setText(cur+k);
+                });
+                int w=light?dp(70):dp(58), h=light?dp(44):dp(58);
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(w,h); lp.setMargins(dp(6),dp(4),dp(6),dp(4));
+                row.addView(b,lp);
+                if(k.equals("5")) five=b;
+            }
+            root.addView(row,new LinearLayout.LayoutParams(-2,-2));
+        }
+        TextView brand=txt("HKS  ·  hksalameh",10,light?Color.argb(190,255,255,255):Color.argb(115,255,255,255),false);
+        brand.setLetterSpacing(.3f); brand.setGravity(Gravity.CENTER);
+        frame.addView(brand,new FrameLayout.LayoutParams(-1,dp(30),Gravity.BOTTOM));
+
+        setContentView(frame);
+        final Button f0=five; if(f0!=null) f0.post(f0::requestFocus);
+    }
+
+    private android.graphics.drawable.StateListDrawable keyBg(boolean light,float dn){
+        android.graphics.drawable.StateListDrawable sd=new android.graphics.drawable.StateListDrawable();
+        GradientDrawable on=new GradientDrawable(), off=new GradientDrawable();
+        if(light){
+            on.setCornerRadius(14*dn); off.setCornerRadius(14*dn);
+            on.setColor(Color.rgb(76,110,245)); off.setColor(Color.rgb(238,241,248));
+        } else {
+            on.setShape(GradientDrawable.OVAL); off.setShape(GradientDrawable.OVAL);
+            on.setColor(Color.argb(80,255,255,255)); on.setStroke((int)(2*dn),Color.WHITE);
+            off.setColor(Color.argb(22,255,255,255)); off.setStroke((int)(1.3f*dn),Color.argb(60,255,255,255));
+        }
+        sd.addState(new int[]{android.R.attr.state_focused},on);
+        sd.addState(new int[]{android.R.attr.state_pressed},on);
+        sd.addState(new int[]{},off);
+        return sd;
+    }
+
+    @Override public boolean dispatchKeyEvent(android.view.KeyEvent e){
+        return super.dispatchKeyEvent(e);
     }
 
     private void allowUninstall(){

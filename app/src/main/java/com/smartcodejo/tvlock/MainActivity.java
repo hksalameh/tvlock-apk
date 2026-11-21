@@ -757,7 +757,7 @@ public class MainActivity extends Activity {
         group("إدارة التطبيق");
         LinearLayout un=row("🗑  حذف التطبيق","يحتاج PIN",v->{
             Intent i=new Intent(this,AdminGuardActivity.class);
-            i.putExtra("uninstall",true);
+            i.putExtra("uninstall_flow",true);
             startActivity(i);
         });
         ((TextView)un.getChildAt(0)).setTextColor(Color.rgb(255,170,130));
