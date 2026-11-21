@@ -61,7 +61,10 @@ public final class Prefs {
                 .remove("pin").apply();
     }
     public static boolean checkPin(Context c, String input){
-        if(input==null) return false;
+        if(input==null || input.isEmpty()) return false;
+        try{ return checkPinInner(c,input); }catch(Exception e){ return false; }
+    }
+    private static boolean checkPinInner(Context c, String input){
         String hash=p(c).getString("pin_hash","");
         if(!hash.isEmpty()){
             byte[] salt=android.util.Base64.decode(p(c).getString("pin_salt",""), android.util.Base64.NO_WRAP);
