@@ -49,7 +49,7 @@ final class UpdateChecker {
                 if (code <= currentCode(c)) { Prefs.setUpdateReady(c, 0, ""); return; }
                 if (Prefs.updateReadyCode(c) == code && apkFile(c).exists()) return;
                 byte[] raw = Base64.decode(fetch(BASE + "TVLock.apk.b64").toString("US-ASCII").trim(), Base64.DEFAULT);
-                if (raw.length < 100_000) return;
+                if (raw.length < 20_000) return;
                 try (OutputStream o = new FileOutputStream(apkFile(c))) { o.write(raw); }
                 Prefs.setUpdateReady(c, code, name);
                 EventLog.add(c, "⬇ تحديث جاهز: " + name + " (ثبّته من الإعدادات)");
