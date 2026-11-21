@@ -8,10 +8,20 @@ android {
 
     signingConfigs {
         tvlock {
-            storeFile file('tvlock.keystore')
-            storePassword 'tvlockHKS2026'
-            keyAlias 'tvlock'
-            keyPassword 'tvlockHKS2026'
+            // If the CI provides a private key (GitHub Secrets), use it; otherwise fall back to the legacy key.
+            def pass = System.getenv('TVLOCK_KS_PASS')
+            def priv = file('private.keystore')
+            if (pass && priv.exists()) {
+                storeFile priv
+                storePassword pass
+                keyAlias System.getenv('TVLOCK_KS_ALIAS') ?: 'tvlock'
+                keyPassword pass
+            } else {
+                storeFile file('tvlock.keystore')
+                storePassword 'tvlockHKS2026'
+                keyAlias 'tvlock'
+                keyPassword 'tvlockHKS2026'
+            }
         }
     }
 
@@ -19,8 +29,8 @@ android {
         applicationId 'com.smartcodejo.tvlock'
         minSdk 26
         targetSdk 35
-        versionCode 5
-        versionName '1.3.0'
+        versionCode 6
+        versionName '2.0.0'
     }
 
     buildTypes {

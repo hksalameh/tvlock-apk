@@ -39,7 +39,7 @@ public class MainActivity extends Activity {
 
     @Override protected void onCreate(Bundle b){
         super.onCreate(b);
-        if(Prefs.pin(this).isEmpty()) showFirstSetup(); else showPinGate();
+        if(!Prefs.hasPin(this)) showFirstSetup(); else showPinGate();
     }
 
     @Override protected void onResume(){
@@ -131,7 +131,7 @@ public class MainActivity extends Activity {
         pin.setImeOptions(EditorInfo.IME_ACTION_DONE);
         Button enter=button("دخول إلى لوحة التحكم");
         View.OnClickListener action=v->{
-            if(Prefs.pin(this).equals(pin.getText().toString())){
+            if(Prefs.checkPin(this,pin.getText().toString())){
                 hideKeyboard(pin);
                 authenticated=true;
                 buildDashboard();
@@ -249,6 +249,46 @@ public class MainActivity extends Activity {
         Button resetDays=button("إعادة كل الأيام للوقت العام");
         resetDays.setOnClickListener(v->{ Prefs.clearAllDayTimes(this); ScheduleUtil.reschedule(this); LockOverlayService.sync(this); buildSettings(); });
 
+        section("وضع الامتحانات (قفل يومي إضافي)");
+        Button exam=button((Prefs.extraOn(this)?"✓ شغّال":"موقوف")+"  — اضغط للتبديل");
+        exam.setOnClickListener(v->{ Prefs.setExtraOn(this,!Prefs.extraOn(this)); ScheduleUtil.reschedule(this); LockOverlayService.sync(this); buildSettings(); });
+        Button exS=button("بداية:  "+time(Prefs.extraStartHour(this),Prefs.extraStartMinute(this)));
+        exS.setOnClickListener(v->pickTime("بداية وضع الامتحانات",Prefs.extraStartHour(this),Prefs.extraStartMinute(this),(h,m)->{
+            Prefs.setExtra(this,Prefs.extraOn(this),h,m,Prefs.extraEndHour(this),Prefs.extraEndMinute(this)); ScheduleUtil.reschedule(this); buildSettings(); }));
+        Button exE=button("نهاية:  "+time(Prefs.extraEndHour(this),Prefs.extraEndMinute(this)));
+        exE.setOnClickListener(v->pickTime("نهاية وضع الامتحانات",Prefs.extraEndHour(this),Prefs.extraEndMinute(this),(h,m)->{
+            Prefs.setExtra(this,Prefs.extraOn(this),Prefs.extraStartHour(this),Prefs.extraStartMinute(this),h,m); ScheduleUtil.reschedule(this); buildSettings(); }));
+
+        section("حدّ التشغيل المتواصل");
+        Button ses=button((Prefs.sessionOn(this)?"✓ شغّال":"موقوف")+"  — اضغط للتبديل");
+        ses.setOnClickListener(v->{ Prefs.setSessionOn(this,!Prefs.sessionOn(this)); buildSettings(); });
+        Button sl=button("بعد "+Prefs.sessionLimitMin(this)+" دقيقة (اضغط للتغيير: 60/90/120/180)");
+        sl.setOnClickListener(v->{ int c=Prefs.sessionLimitMin(this); Prefs.setSessionLimitMin(this,c<60?60:c<90?90:c<120?120:c<180?180:60); buildSettings(); });
+        Button sb=button("استراحة "+Prefs.sessionBreakMin(this)+" دقيقة (اضغط للتغيير: 10/15/30)");
+        sb.setOnClickListener(v->{ int c=Prefs.sessionBreakMin(this); Prefs.setSessionBreakMin(this,c<15?15:c<30?30:10); buildSettings(); });
+        note("تشغيل اليوم: "+ScreenTracker.format(ScreenTracker.todayMs(this)));
+
+        section("قفل تطبيقات معيّنة");
+        Button ap=button((Prefs.appsOn(this)?"✓ شغّال":"موقوف")+" — "+Prefs.appsBlocked(this).size()+" تطبيق");
+        ap.setOnClickListener(v->{ Prefs.setAppsOn(this,!Prefs.appsOn(this)); buildSettings(); });
+        Button apPick=button("اختيار التطبيقات"); apPick.setOnClickListener(v->pickApps());
+        Button apS=button("من:  "+time(Prefs.appsStartHour(this),Prefs.appsStartMinute(this)));
+        apS.setOnClickListener(v->pickTime("بداية قفل التطبيقات",Prefs.appsStartHour(this),Prefs.appsStartMinute(this),(h,m)->{
+            Prefs.setAppsWindow(this,h,m,Prefs.appsEndHour(this),Prefs.appsEndMinute(this)); buildSettings(); }));
+        Button apE=button("إلى:  "+time(Prefs.appsEndHour(this),Prefs.appsEndMinute(this)));
+        apE.setOnClickListener(v->pickTime("نهاية قفل التطبيقات",Prefs.appsEndHour(this),Prefs.appsEndMinute(this),(h,m)->{
+            Prefs.setAppsWindow(this,Prefs.appsStartHour(this),Prefs.appsStartMinute(this),h,m); buildSettings(); }));
+
+        section("التحديث");
+        int rc=Prefs.updateReadyCode(this);
+        if(rc>UpdateChecker.currentCode(this)){
+            Button up=button("⬇ تثبيت التحديث "+Prefs.updateReadyName(this));
+            up.setOnClickListener(v->{ String e=UpdateChecker.install(this); if(e!=null) Toast.makeText(this,e,Toast.LENGTH_LONG).show(); });
+        }
+        Button chk=button("🔄 فحص التحديثات الآن");
+        chk.setOnClickListener(v->{ UpdateChecker.checkNow(this); Toast.makeText(this,"جارٍ الفحص… ارجع للإعدادات بعد دقيقة",Toast.LENGTH_LONG).show(); });
+        note("الإصدار الحالي: "+currentVersionName()+"  |  تنبيهات تيليجرام وبقية الإعدادات من صفحة الموبايل");
+
         section("الحماية والرسالة");
         Button logBtn=button("📋 سجل الأحداث"); logBtn.setOnClickListener(v->showLogDialog());
         Button pin=button("تغيير PIN"); pin.setOnClickListener(v->changePin());
@@ -344,6 +384,38 @@ public class MainActivity extends Activity {
     }
 
     private interface TimeSaver { void save(int h,int m); }
+
+    private String currentVersionName(){
+        try{ return getPackageManager().getPackageInfo(getPackageName(),0).versionName; }catch(Exception e){ return "?"; }
+    }
+
+    /** Multi-choice dialog of launchable apps for the per-app lock. */
+    private void pickApps(){
+        android.content.pm.PackageManager pm=getPackageManager();
+        java.util.LinkedHashMap<String,String> apps=new java.util.LinkedHashMap<>();
+        for(String cat:new String[]{Intent.CATEGORY_LAUNCHER,Intent.CATEGORY_LEANBACK_LAUNCHER}){
+            Intent q=new Intent(Intent.ACTION_MAIN).addCategory(cat);
+            for(android.content.pm.ResolveInfo r:pm.queryIntentActivities(q,0)){
+                String pk=r.activityInfo.packageName;
+                if(pk.equals(getPackageName()) || apps.containsKey(pk)) continue;
+                apps.put(pk,String.valueOf(r.loadLabel(pm)));
+            }
+        }
+        final String[] pkgs=apps.keySet().toArray(new String[0]);
+        final String[] labels=new String[pkgs.length];
+        final boolean[] on=new boolean[pkgs.length];
+        java.util.Set<String> cur=Prefs.appsBlocked(this);
+        for(int i=0;i<pkgs.length;i++){ labels[i]=apps.get(pkgs[i]); on[i]=cur.contains(pkgs[i]); }
+        android.app.AlertDialog d=new android.app.AlertDialog.Builder(this)
+                .setTitle("التطبيقات المحجوبة")
+                .setMultiChoiceItems(labels,on,(dlg,i,checked)->on[i]=checked)
+                .setPositiveButton("حفظ",(dlg,w)->{
+                    java.util.Set<String> set=new java.util.HashSet<>();
+                    for(int i=0;i<pkgs.length;i++) if(on[i]) set.add(pkgs[i]);
+                    Prefs.setAppsBlocked(this,set); buildSettings();
+                }).setNegativeButton("إلغاء",null).create();
+        d.show();
+    }
 
     private void editDayTimes(int iso,String name){
         final int sh0=Prefs.dayStartHour(this,iso), sm0=Prefs.dayStartMinute(this,iso);

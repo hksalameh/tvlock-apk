@@ -7,6 +7,14 @@ import android.view.KeyEvent;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.IntentFilter;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.PowerManager;
+import android.widget.Toast;
+
 import java.util.Locale;
 
 public class GuardAccessibilityService extends AccessibilityService {
@@ -26,6 +34,41 @@ public class GuardAccessibilityService extends AccessibilityService {
         return false;
     }
 
+    private final Handler handler=new Handler(Looper.getMainLooper());
+    private long lastAppBlock=0L;
+    private BroadcastReceiver screenRx;
+
+    private final Runnable tick=new Runnable(){ @Override public void run(){
+        try{ checkSession(); }catch(Exception ignored){}
+        try{ UpdateChecker.maybeCheck(GuardAccessibilityService.this); }catch(Exception ignored){}
+        handler.postDelayed(this,30_000L);
+    }};
+
+    /** Continuous screen-on limit: force a short lock break. */
+    private void checkSession(){
+        if(!Prefs.sessionOn(this)) return;
+        PowerManager pm=(PowerManager)getSystemService(Context.POWER_SERVICE);
+        if(pm==null || !pm.isInteractive()) return;
+        if(ScheduleUtil.shouldLock(this)) return;
+        long limit=Prefs.sessionLimitMin(this)*60_000L;
+        if(ScreenTracker.sessionMs(this)>=limit){
+            int br=Prefs.sessionBreakMin(this);
+            EventLog.alert(this,"⏸ استراحة إجبارية "+br+" دقيقة بعد "+Prefs.sessionLimitMin(this)+" دقيقة تشغيل متواصل");
+            ScheduleUtil.lockFor(this,br);
+            ScreenTracker.restartSessionAt(this,System.currentTimeMillis()+br*60_000L);
+        }
+    }
+
+    private boolean appBlockedNow(String pkg){
+        if(!Prefs.appsOn(this) || pkg.isEmpty() || pkg.equals(getPackageName())) return false;
+        if(!Prefs.appsBlocked(this).contains(pkg)) return false;
+        java.time.ZonedDateTime n=java.time.ZonedDateTime.now(java.time.ZoneOffset.ofHours(3));
+        int cur=n.getHour()*60+n.getMinute();
+        int s=Prefs.appsStartHour(this)*60+Prefs.appsStartMinute(this);
+        int e=Prefs.appsEndHour(this)*60+Prefs.appsEndMinute(this);
+        return s<e ? (cur>=s && cur<e) : (cur>=s || cur<e);
+    }
+
     private long lastGuardLaunch=0L;
     private long lastScan=0L;
     private boolean uninstallDialogVisible=false;
@@ -36,18 +79,41 @@ public class GuardAccessibilityService extends AccessibilityService {
         EventLog.add(this,"Accessibility شغّالة");
         PhoneUnlockServer.ensureStarted(this);
         LockOverlayService.sync(this);
+        ScheduleUtil.reschedule(this);
+        PowerManager pm=(PowerManager)getSystemService(Context.POWER_SERVICE);
+        ScreenTracker.onScreen(this, pm==null || pm.isInteractive());
+        screenRx=new BroadcastReceiver(){ @Override public void onReceive(Context c, Intent i){
+            ScreenTracker.onScreen(c, Intent.ACTION_SCREEN_ON.equals(i.getAction()));
+        }};
+        IntentFilter fl=new IntentFilter(); fl.addAction(Intent.ACTION_SCREEN_ON); fl.addAction(Intent.ACTION_SCREEN_OFF);
+        registerReceiver(screenRx, fl);
+        handler.removeCallbacks(tick); handler.postDelayed(tick,30_000L);
     }
 
     @Override public void onDestroy(){
         if(instance==this) instance=null;
-        EventLog.add(this,"⚠ Accessibility انطفأت");
+        handler.removeCallbacks(tick);
+        try{ if(screenRx!=null) unregisterReceiver(screenRx); }catch(Exception ignored){}
+        EventLog.alert(this,"⚠ Accessibility انطفأت");
         PhoneUnlockServer.stopInstance();
         super.onDestroy();
     }
 
     @Override public void onAccessibilityEvent(AccessibilityEvent event){
         if(ScheduleUtil.shouldLock(this)) LockOverlayService.sync(this);
-        if(event==null || Prefs.pin(this).isEmpty()) return;
+        if(event==null) return;
+        if(event.getEventType()==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && event.getPackageName()!=null){
+            String bp=event.getPackageName().toString();
+            long t0=SystemClock.elapsedRealtime();
+            if(appBlockedNow(bp) && t0-lastAppBlock>1500){
+                lastAppBlock=t0;
+                EventLog.add(this,"تطبيق محجوب: "+bp);
+                performGlobalAction(GLOBAL_ACTION_HOME);
+                Toast.makeText(this,"هذا التطبيق مقفول في هذا الوقت",Toast.LENGTH_LONG).show();
+                return;
+            }
+        }
+        if(!Prefs.hasPin(this)) return;
 
         if(Prefs.adminBypassActive(this)){
             uninstallDialogVisible=false;
@@ -133,7 +199,8 @@ public class GuardAccessibilityService extends AccessibilityService {
         long now=SystemClock.elapsedRealtime();
         if(now-lastGuardLaunch<700) return;
         lastGuardLaunch=now;
-        EventLog.add(this,uninstallFlow?"محاولة حذف التطبيق":"محاولة فتح الإعدادات/المثبّت");
+        if(uninstallFlow) EventLog.alert(this,"🚨 محاولة حذف التطبيق");
+        else EventLog.add(this,"محاولة فتح الإعدادات/المثبّت");
         Intent i=new Intent(this,AdminGuardActivity.class);
         i.putExtra("uninstall_flow",uninstallFlow);
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);

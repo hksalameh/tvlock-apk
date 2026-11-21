@@ -28,7 +28,7 @@ final class PhoneUnlockServer {
     static final int PORT = 8765;
     private static final int MAX_FAILS = 5;
     private static final long LOCKOUT_MS = 5 * 60 * 1000L;
-    private static final int MAX_BODY = 256;
+    private static final int MAX_BODY = 16384;
 
     private final Context ctx;
     private final Listener listener;
@@ -49,8 +49,11 @@ final class PhoneUnlockServer {
     /** One always-on server for the whole app (hosted by the accessibility service). Safe to call repeatedly. */
     static synchronized void ensureStarted(Context c) {
         final Context app = c.getApplicationContext();
+        Prefs.migratePin(app);
         if (instance == null) {
             instance = new PhoneUnlockServer(app, () -> {
+                Prefs.setForceLockUntil(app, 0L);
+                ScreenTracker.restartSessionAt(app, System.currentTimeMillis());
                 if (ScheduleUtil.shouldLock(app)) {
                     Prefs.setBypassUntil(app, ScheduleUtil.currentWindowEnd(app));
                 }
@@ -108,6 +111,8 @@ final class PhoneUnlockServer {
         }
     }
 
+    private static final class Resp { String msg; boolean ok; boolean good; }
+
     private void handle(Socket c) throws IOException {
         InputStream in = c.getInputStream();
         String reqLine = readLine(in);
@@ -120,52 +125,143 @@ final class PhoneUnlockServer {
                 catch (NumberFormatException ignored) {}
             }
         }
-        String msg = null;
-        boolean ok = false;
-        if (reqLine.startsWith("POST /")) {
-            contentLength = Math.min(Math.max(contentLength, 0), MAX_BODY);
-            byte[] body = new byte[contentLength];
-            int off = 0;
-            while (off < contentLength) {
-                int r = in.read(body, off, contentLength - off);
-                if (r < 0) break;
-                off += r;
-            }
-            Map<String, String> form = parseForm(new String(body, 0, off, StandardCharsets.UTF_8));
-            String result = attempt(form.containsKey("pin") ? form.get("pin") : "");
-            if (!"ok".equals(result)) {
-                msg = result;
-            } else if (reqLine.startsWith("POST /log")) {
-                write(c.getOutputStream(), 200, logPage(EventLog.read(ctx)));
-                return;
-            } else if (reqLine.startsWith("POST /unlock")) {
-                EventLog.add(ctx, "فتح من الموبايل");
-                ok = true;
-                msg = "تم الفتح ✔";
-            } else if (reqLine.startsWith("POST /tonight")) {
-                String t = form.containsKey("time") ? form.get("time") : "";
-                if (t.matches("\\d{1,2}:\\d{2}")) {
-                    int th = Integer.parseInt(t.substring(0, t.indexOf(':')));
-                    int tm = Integer.parseInt(t.substring(t.indexOf(':') + 1));
-                    if (th < 24 && tm < 60) {
-                        ScheduleUtil.setTonightStart(ctx, th, tm);
-                        EventLog.add(ctx, String.format(java.util.Locale.ROOT, "قفل الليلة فقط %02d:%02d من الموبايل", th, tm));
-                        msg = String.format(java.util.Locale.ROOT, "تم: قفل الليلة فقط الساعة %02d:%02d ✔", th, tm);
-                    } else msg = "وقت غير صالح";
-                } else msg = "وقت غير صالح";
-            } else if (reqLine.startsWith("POST /clear")) {
-                ScheduleUtil.clearTonightStart(ctx);
-                msg = "تم إلغاء تعديل الليلة ✔";
-            } else {
-                write(c.getOutputStream(), 404, page("غير موجود", ""));
-                return;
-            }
-        } else if (!reqLine.startsWith("GET / ")) {
-            write(c.getOutputStream(), 404, page("غير موجود", ""));
+        OutputStream out = c.getOutputStream();
+        if (reqLine.startsWith("OPTIONS ")) { write(out, 200, "text/plain", "", false); return; }
+        if (reqLine.startsWith("GET /panel")) { write(out, 200, "text/html", PanelPage.html(), false); return; }
+        if (reqLine.startsWith("GET /ping")) { write(out, 200, "application/json", "{\"app\":\"tvlock\",\"name\":" + q(Prefs.tvName(ctx)) + "}", true); return; }
+        if (!reqLine.startsWith("POST /")) {
+            if (reqLine.startsWith("GET / ")) { write(out, 200, "text/html", page(null, status()), false); return; }
+            write(out, 404, "text/html", page("غير موجود", ""), false);
             return;
         }
-        write(c.getOutputStream(), 200, page(msg, status()));
-        if (ok) listener.onUnlock();
+        contentLength = Math.min(Math.max(contentLength, 0), MAX_BODY);
+        byte[] body = new byte[contentLength];
+        int off = 0;
+        while (off < contentLength) {
+            int r = in.read(body, off, contentLength - off);
+            if (r < 0) break;
+            off += r;
+        }
+        Map<String, String> form = parseForm(new String(body, 0, off, StandardCharsets.UTF_8));
+        boolean json = "1".equals(form.get("json"));
+        String result = attempt(form.containsKey("pin") ? form.get("pin") : "");
+        String msg;
+        boolean unlockNow = false;
+        String route = reqLine.split(" ")[1];
+        if (!"ok".equals(result)) {
+            msg = result;
+        } else if (route.startsWith("/log")) {
+            if (json) { write(out, 200, "application/json", "{\"ok\":true,\"msg\":" + q(EventLog.read(ctx)) + "}", true); }
+            else write(out, 200, "text/html", logPage(EventLog.read(ctx)), false);
+            return;
+        } else if (route.startsWith("/backup")) {
+            write(out, 200, "text/plain", Prefs.exportJson(ctx), json);
+            return;
+        } else {
+            Resp r = new Resp();
+            r.good = true;
+            msg = route(route, form, r);
+            unlockNow = r.ok;
+        }
+        boolean good = msg != null && msg.contains("✔");
+        if (json) {
+            write(out, 200, "application/json", "{\"ok\":" + good + ",\"msg\":" + q(msg == null ? "" : msg)
+                    + ",\"status\":" + q(status()) + ",\"name\":" + q(Prefs.tvName(ctx)) + "}", true);
+        } else {
+            write(out, 200, "text/html", page(msg, status()), false);
+        }
+        if (unlockNow) listener.onUnlock();
+    }
+
+    private static String q(String s) {
+        StringBuilder b = new StringBuilder("\"");
+        for (char ch : s.toCharArray()) {
+            switch (ch) {
+                case '"': b.append("\\\""); break;
+                case '\\': b.append("\\\\"); break;
+                case '\n': b.append("\\n"); break;
+                case '\r': break;
+                default: b.append(ch < 32 ? ' ' : ch);
+            }
+        }
+        return b.append('"').toString();
+    }
+
+    private static int[] hm(String t) {
+        if (t == null || !t.matches("\\d{1,2}:\\d{2}")) return null;
+        int a = Integer.parseInt(t.substring(0, t.indexOf(':')));
+        int b = Integer.parseInt(t.substring(t.indexOf(':') + 1));
+        return (a < 24 && b < 60) ? new int[]{a, b} : null;
+    }
+
+    private static int num(String s, int def, int min, int max) {
+        try { int v = Integer.parseInt(s.trim()); return Math.max(min, Math.min(max, v)); }
+        catch (Exception e) { return def; }
+    }
+
+    /** Authenticated commands. Returns a message (contains ✔ on success). */
+    private String route(String route, Map<String, String> f, Resp r) {
+        if (route.startsWith("/unlock")) {
+            EventLog.add(ctx, "فتح من الموبايل");
+            r.ok = true;
+            return "تم الفتح ✔";
+        }
+        if (route.startsWith("/tonight")) {
+            int[] t = hm(f.get("time"));
+            if (t == null) return "وقت غير صالح";
+            ScheduleUtil.setTonightStart(ctx, t[0], t[1]);
+            EventLog.add(ctx, String.format(java.util.Locale.ROOT, "قفل الليلة فقط %02d:%02d من الموبايل", t[0], t[1]));
+            return String.format(java.util.Locale.ROOT, "تم: قفل الليلة فقط الساعة %02d:%02d ✔", t[0], t[1]);
+        }
+        if (route.startsWith("/clear")) {
+            ScheduleUtil.clearTonightStart(ctx);
+            return "تم إلغاء تعديل الليلة ✔";
+        }
+        if (route.startsWith("/lock")) {
+            int m = num(f.getOrDefault("min", "30"), 30, 1, 600);
+            ScheduleUtil.lockFor(ctx, m);
+            EventLog.add(ctx, "قفل فوري من الموبايل " + m + " دقيقة");
+            return "تم القفل " + m + " دقيقة ✔";
+        }
+        if (route.startsWith("/bonus")) {
+            String m = ScheduleUtil.bonus30(ctx);
+            EventLog.add(ctx, "مكافأة 30 دقيقة من الموبايل");
+            return m;
+        }
+        if (route.startsWith("/exam")) {
+            boolean on = "1".equals(f.get("on"));
+            int[] s = hm(f.get("start")), e = hm(f.get("end"));
+            if (on && (s == null || e == null)) return "وقت غير صالح";
+            if (s != null && e != null) Prefs.setExtra(ctx, on, s[0], s[1], e[0], e[1]);
+            else Prefs.setExtraOn(ctx, on);
+            ScheduleUtil.reschedule(ctx);
+            LockOverlayService.sync(ctx);
+            EventLog.add(ctx, "وضع الامتحانات " + (on ? "شغّال" : "موقوف"));
+            return "وضع الامتحانات " + (on ? "شغّال" : "موقوف") + " ✔";
+        }
+        if (route.startsWith("/session")) {
+            Prefs.setSessionOn(ctx, "1".equals(f.get("on")));
+            Prefs.setSessionLimitMin(ctx, num(f.getOrDefault("limit", "120"), 120, 10, 600));
+            Prefs.setSessionBreakMin(ctx, num(f.getOrDefault("brk", "15"), 15, 1, 120));
+            return "تم حفظ حدّ الجلسة ✔";
+        }
+        if (route.startsWith("/tg")) {
+            String tok = f.getOrDefault("token", "").trim(), chat = f.getOrDefault("chat", "").trim();
+            String name = f.getOrDefault("name", "").trim();
+            if (name.isEmpty()) name = Prefs.tvName(ctx);
+            Prefs.setTelegram(ctx, tok, chat, name);
+            if (!tok.isEmpty()) Notifier.send(ctx, "✅ تم ربط التنبيهات", true);
+            return "تم حفظ إعدادات تيليجرام ✔";
+        }
+        if (route.startsWith("/restore")) {
+            String d = f.getOrDefault("data", "");
+            if (!Prefs.importJson(ctx, d)) return "ملف النسخة غير صالح";
+            ScheduleUtil.reschedule(ctx);
+            LockOverlayService.sync(ctx);
+            EventLog.add(ctx, "استعادة نسخة احتياطية");
+            return "تمت الاستعادة ✔";
+        }
+        return "غير موجود";
     }
 
     private String status() {
@@ -175,7 +271,8 @@ final class PhoneUnlockServer {
         return String.format(java.util.Locale.ROOT, "القفل الليلة يبدأ %02d:%02d%s — الفتح %02d:%02d%s",
                 st[0], st[1], custom ? " (معدّل لهذه الليلة فقط)" : "",
                 ScheduleUtil.effectiveEnd(ctx, d)[0], ScheduleUtil.effectiveEnd(ctx, d)[1],
-                ScheduleUtil.shouldLock(ctx) ? " — مقفول الآن" : "");
+                ScheduleUtil.shouldLock(ctx) ? " — مقفول الآن" : "")
+                + " | تشغيل اليوم: " + ScreenTracker.format(ScreenTracker.todayMs(ctx));
     }
 
     private synchronized String attempt(String pin) {
@@ -184,9 +281,7 @@ final class PhoneUnlockServer {
             EventLog.add(ctx, "محاولة من الموبايل أثناء الإيقاف المؤقت");
             return "محاولات كثيرة — انتظر " + ((lockedUntil - now) / 1000 + 1) + " ثانية";
         }
-        String real = Prefs.pin(ctx);
-        boolean good = !real.isEmpty() && pin.length() > 0 && MessageDigest.isEqual(
-                real.getBytes(StandardCharsets.UTF_8), pin.getBytes(StandardCharsets.UTF_8));
+        boolean good = Prefs.hasPin(ctx) && pin.length() > 0 && Prefs.checkPin(ctx, pin);
         if (good) {
             fails = 0;
             return "ok";
@@ -194,7 +289,7 @@ final class PhoneUnlockServer {
         if (++fails >= MAX_FAILS) {
             fails = 0;
             lockedUntil = now + LOCKOUT_MS;
-            EventLog.add(ctx, "5 محاولات PIN غلط من الموبايل — إيقاف 5 دقائق");
+            EventLog.alert(ctx, "⚠ 5 محاولات PIN غلط من الموبايل — إيقاف 5 دقائق");
             return "PIN غير صحيح — تم إيقاف المحاولات 5 دقائق";
         }
         EventLog.add(ctx, "PIN غلط من الموبايل");
@@ -208,7 +303,9 @@ final class PhoneUnlockServer {
             if (i <= 0) continue;
             try {
                 String v = URLDecoder.decode(kv.substring(i + 1), "UTF-8");
-                m.put(kv.substring(0, i), v.length() > 16 ? v.substring(0, 16) : v);
+                String k = kv.substring(0, i);
+                int lim = k.equals("data") ? 12000 : (k.equals("token") ? 128 : 64);
+                m.put(k, v.length() > lim ? v.substring(0, lim) : v);
             } catch (Exception ignored) {}
         }
         return m;
@@ -225,11 +322,15 @@ final class PhoneUnlockServer {
         return b.toString("UTF-8");
     }
 
-    private static void write(OutputStream out, int code, String html) throws IOException {
-        byte[] body = html.getBytes(StandardCharsets.UTF_8);
+    private static void write(OutputStream out, int code, String type, String text, boolean cors) throws IOException {
+        byte[] body = text.getBytes(StandardCharsets.UTF_8);
         String head = "HTTP/1.1 " + code + (code == 200 ? " OK" : " Not Found") + "\r\n"
-                + "Content-Type: text/html; charset=utf-8\r\n"
+                + "Content-Type: " + type + "; charset=utf-8\r\n"
                 + "Cache-Control: no-store\r\n"
+                + "Access-Control-Allow-Origin: *\r\n"
+                + "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
+                + "Access-Control-Allow-Headers: Content-Type\r\n"
+                + "Access-Control-Allow-Private-Network: true\r\n"
                 + "Content-Length: " + body.length + "\r\n"
                 + "Connection: close\r\n\r\n";
         out.write(head.getBytes(StandardCharsets.US_ASCII));
@@ -250,21 +351,36 @@ final class PhoneUnlockServer {
         String m = msg == null ? "" : "<p style='color:" + (msg.contains("✔") ? "#8f8" : "#f88") + "'>" + msg + "</p>";
         String st = status.isEmpty() ? "" : "<p style='color:#9cf;font-size:15px'>" + status + "</p>";
         String pin = "<input name='pin' type='password' inputmode='numeric' autocomplete='off' "
-                + "placeholder='PIN' style='font-size:24px;width:100%;padding:10px;text-align:center;box-sizing:border-box;margin-top:8px'>";
-        String btn = "style='margin-top:10px;font-size:20px;width:100%;padding:10px'";
-        String unlock = "<form method='POST' action='/unlock'><h3>🔓 فتح الآن</h3>" + pin
-                + "<button " + btn + ">فتح</button></form>";
-        String tonight = "<form method='POST' action='/tonight'><h3>🌙 قفل الليلة فقط</h3>"
-                + "<input name='time' type='time' value='02:30' style='font-size:24px;width:100%;padding:10px;text-align:center;box-sizing:border-box'>"
-                + pin + "<button " + btn + ">تعيين لهذه الليلة فقط</button></form>"
-                + "<form method='POST' action='/log'><h3>📋 السجل</h3>" + pin + "<button " + btn + ">عرض السجل</button></form>"
-                + "<form method='POST' action='/clear'>" + pin + "<button " + btn + ">إلغاء تعديل الليلة</button></form>";
+                + "placeholder='PIN' style='font-size:22px;width:100%;padding:8px;text-align:center;box-sizing:border-box;margin-top:8px'>";
+        String btn = "style='margin-top:8px;font-size:19px;width:100%;padding:9px'";
+        String in = "style='font-size:20px;width:100%;padding:8px;text-align:center;box-sizing:border-box;margin-top:6px'";
+        StringBuilder b = new StringBuilder();
+        b.append("<form method='POST' action='/unlock'><h3>🔓 فتح الآن</h3>").append(pin).append("<button ").append(btn).append(">فتح</button></form>");
+        b.append("<form method='POST' action='/bonus'><h3>⏱ +30 دقيقة</h3>").append(pin).append("<button ").append(btn).append(">أضف 30 دقيقة</button></form>");
+        b.append("<form method='POST' action='/lock'><h3>🔒 قفل فوري</h3><select name='min' ").append(in).append("><option value='30'>30 دقيقة</option><option value='60'>60 دقيقة</option><option value='120'>120 دقيقة</option></select>")
+                .append(pin).append("<button ").append(btn).append(">اقفل الآن</button></form>");
+        b.append("<form method='POST' action='/tonight'><h3>🌙 قفل الليلة فقط</h3><input name='time' type='time' value='02:30' ").append(in).append(">")
+                .append(pin).append("<button ").append(btn).append(">تعيين لهذه الليلة فقط</button></form>");
+        b.append("<form method='POST' action='/clear'>").append(pin).append("<button ").append(btn).append(">إلغاء تعديل الليلة</button></form>");
+        b.append("<form method='POST' action='/exam'><h3>📚 وضع الامتحانات</h3><select name='on' ").append(in).append("><option value='1'>شغّال</option><option value='0'>موقوف</option></select>")
+                .append("<input name='start' type='time' value='16:00' ").append(in).append("><input name='end' type='time' value='20:00' ").append(in).append(">")
+                .append(pin).append("<button ").append(btn).append(">حفظ</button></form>");
+        b.append("<form method='POST' action='/session'><h3>⏸ حدّ الجلسة</h3><select name='on' ").append(in).append("><option value='1'>شغّال</option><option value='0'>موقوف</option></select>")
+                .append("<input name='limit' type='number' value='120' placeholder='دقائق التشغيل' ").append(in).append("><input name='brk' type='number' value='15' placeholder='دقائق الاستراحة' ").append(in).append(">")
+                .append(pin).append("<button ").append(btn).append(">حفظ</button></form>");
+        b.append("<form method='POST' action='/tg'><h3>📨 تنبيهات تيليجرام</h3><input name='name' placeholder='اسم التلفزيون' ").append(in).append(">")
+                .append("<input name='token' placeholder='Bot token' ").append(in).append("><input name='chat' placeholder='Chat id' ").append(in).append(">")
+                .append(pin).append("<button ").append(btn).append(">حفظ وتجربة</button></form>");
+        b.append("<form method='POST' action='/log'><h3>📋 السجل</h3>").append(pin).append("<button ").append(btn).append(">عرض</button></form>");
+        b.append("<form method='POST' action='/backup'><h3>💾 نسخة احتياطية</h3>").append(pin).append("<button ").append(btn).append(">تنزيل النسخة</button></form>");
+        b.append("<form method='POST' action='/restore'><h3>♻ استعادة</h3><textarea name='data' rows='3' placeholder='الصق النسخة هنا' ").append(in).append("></textarea>")
+                .append(pin).append("<button ").append(btn).append(">استعادة</button></form>");
+        b.append("<p><a style='color:#9cf' href='/panel'>لوحة التحكم بتلفزيونين</a></p>");
         return "<!doctype html><html lang='ar' dir='rtl'><head><meta charset='utf-8'>"
                 + "<meta name='viewport' content='width=device-width,initial-scale=1'>"
                 + "<title>TV Lock</title></head>"
                 + "<body style='font-family:sans-serif;background:#031230;color:#fff;max-width:380px;"
                 + "margin:30px auto;padding:0 16px;text-align:center'>"
-                + "<h2>TV Lock</h2>" + m + st + unlock + "<hr style='opacity:.3;margin:24px 0'>" + tonight
-                + "</body></html>";
+                + "<h2>TV Lock</h2>" + m + st + b + "</body></html>";
     }
 }

@@ -28,7 +28,7 @@ public final class ProvisionReceiver extends BroadcastReceiver {
             String schedule = String.format(java.util.Locale.ROOT,
                 "enabled=%s,start=%02d:%02d,end=%02d:%02d,pin_set=%s",
                 Prefs.enabled(c), Prefs.startHour(c), Prefs.startMinute(c),
-                Prefs.endHour(c), Prefs.endMinute(c), !Prefs.pin(c).isEmpty());
+                Prefs.endHour(c), Prefs.endMinute(c), Prefs.hasPin(c));
             DevicePolicyManager dpm =
                 (DevicePolicyManager)c.getSystemService(Context.DEVICE_POLICY_SERVICE);
             boolean admin = dpm != null && dpm.isAdminActive(
@@ -39,7 +39,7 @@ public final class ProvisionReceiver extends BroadcastReceiver {
         if (MIDNIGHT.equals(action)) {
             // Privileged ADB shell only (manifest requires android.permission.DUMP).
             // Change just the start time; preserve PIN, end time, enabled state and weekdays.
-            if (Prefs.pin(c).isEmpty() || !Prefs.enabled(c)) {
+            if (!Prefs.hasPin(c) || !Prefs.enabled(c)) {
                 result("HOLD: TV Lock not configured or disabled; settings unchanged");
                 return;
             }
@@ -50,7 +50,7 @@ public final class ProvisionReceiver extends BroadcastReceiver {
                 "PASS: start=%02d:%02d,end=%02d:%02d,enabled=%s,pin_set=%s",
                 Prefs.startHour(c), Prefs.startMinute(c),
                 Prefs.endHour(c), Prefs.endMinute(c),
-                Prefs.enabled(c), !Prefs.pin(c).isEmpty()));
+                Prefs.enabled(c), Prefs.hasPin(c)));
             return;
         }
         if (!SETUP.equals(action)) {
@@ -63,7 +63,7 @@ public final class ProvisionReceiver extends BroadcastReceiver {
             return;
         }
         // A repeat setup with the same PIN is safe; never reset an unknown PIN.
-        if (!Prefs.pin(c).isEmpty() && !Prefs.pin(c).equals(pin)) {
+        if (Prefs.hasPin(c) && !Prefs.checkPin(c, pin)) {
             result("HOLD: a different PIN is already configured. Existing settings unchanged");
             return;
         }

@@ -40,6 +40,12 @@ final class EventLog {
         }
     }
 
+    /** Logs the event and also sends it to Telegram (if configured). */
+    static void alert(Context c, String msg) {
+        add(c, msg);
+        Notifier.send(c, msg);
+    }
+
     /** Newest first. */
     static synchronized String read(Context c) {
         try {

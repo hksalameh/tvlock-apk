@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"/>
 
     <uses-feature android:name="android.software.leanback" android:required="true"/>
     <uses-feature android:name="android.hardware.touchscreen" android:required="false"/>
@@ -26,6 +28,7 @@
         <activity android:name=".AdminGuardActivity" android:exported="false"/>
 
         <service android:name=".LockOverlayService" android:exported="false"/>
+        <receiver android:name=".UpdateInstallReceiver" android:exported="false"/>
 
         <service
             android:name=".GuardAccessibilityService"

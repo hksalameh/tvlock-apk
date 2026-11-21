@@ -9,6 +9,6 @@ public class TvDeviceAdminReceiver extends DeviceAdminReceiver {
         EventLog.add(context, "حماية الحذف (Device Admin) فُعّلت");
     }
     @Override public void onDisabled(Context context, Intent intent){
-        EventLog.add(context, "⚠ حماية الحذف (Device Admin) أُلغيت");
+        EventLog.alert(context, "⚠ حماية الحذف (Device Admin) أُلغيت");
     }
 }

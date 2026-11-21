@@ -82,7 +82,7 @@ public class AdminGuardActivity extends Activity {
         LinearLayout.LayoutParams fp=new LinearLayout.LayoutParams(-1,dp(42)); fp.setMargins(0,dp(12),0,0); root.addView(footer,fp);
 
         Runnable verify=()->{
-            if(Prefs.pin(this).equals(pin.getText().toString())){
+            if(Prefs.checkPin(this,pin.getText().toString())){
                 hideKeyboard(pin);
                 Prefs.setAdminBypassUntil(this,System.currentTimeMillis()+2*60*1000L);
                 EventLog.add(this,uninstallFlow?"PIN صحيح: السماح بالحذف":"PIN صحيح: سماح دقيقتين للإعدادات");

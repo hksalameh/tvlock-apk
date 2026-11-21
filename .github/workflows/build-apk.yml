@@ -26,7 +26,15 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Private signing key (optional)
+        env:
+          KS_B64: ${{ secrets.TVLOCK_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KS_B64" ]; then echo "$KS_B64" | base64 -d > app/private.keystore; fi
       - name: Build debug APK
+        env:
+          TVLOCK_KS_PASS: ${{ secrets.TVLOCK_KS_PASS }}
+          TVLOCK_KS_ALIAS: ${{ secrets.TVLOCK_KS_ALIAS }}
         run: gradle :app:assembleDebug --stacktrace
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -38,6 +46,9 @@ jobs:
           base64 -w0 app/build/outputs/apk/debug/app-debug.apk > TVLock.apk.b64
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add TVLock.apk.b64
+          VC=$(grep -oP 'versionCode \K[0-9]+' app/build.gradle)
+          VN=$(grep -oP "versionName '\K[^']+" app/build.gradle)
+          printf '{"versionCode":%s,"versionName":"%s"}\n' "$VC" "$VN" > version.json
+          git add TVLock.apk.b64 version.json
           git diff --cached --quiet || git commit -m "build: update TV Lock APK [skip ci]"
           git push

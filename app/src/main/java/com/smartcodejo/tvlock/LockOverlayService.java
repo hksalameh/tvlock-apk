@@ -103,7 +103,13 @@ public class LockOverlayService extends Service {
         sw = Math.max(1280, getResources().getDisplayMetrics().widthPixels);
         sh = Math.max(720, getResources().getDisplayMetrics().heightPixels);
 
-        FrameLayout frame = new FrameLayout(this);
+        FrameLayout frame = new FrameLayout(this) {
+            @Override public boolean dispatchKeyEvent(KeyEvent e) {
+                lastInteraction = System.currentTimeMillis();
+                if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) onRemoteKey(e.getKeyCode());
+                return super.dispatchKeyEvent(e);
+            }
+        };
         frame.setBackgroundColor(Color.rgb(3, 12, 31));
         frame.addView(new LockBackgroundView(this),
                 new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
@@ -320,7 +326,7 @@ public class LockOverlayService extends Service {
 
     private void updateDots() {
         StringBuilder s = new StringBuilder();
-        int n = Math.max(4, Math.max(Prefs.pin(this).length(), entered.length()));
+        int n = Math.max(4, Math.max(Prefs.pinLength(this), entered.length()));
         for (int i = 0; i < n; i++) {
             if (i > 0) s.append("  ");
             s.append(i < entered.length() ? "●" : "○");
@@ -328,8 +334,45 @@ public class LockOverlayService extends Service {
         pinDots.setText(s.toString());
     }
 
+    // ---- emergency remote sequence: UP UP DOWN DOWN OK (once per night, 30 minutes) ----
+    private static final int[] EMERGENCY_SEQ = {
+            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_UP,
+            KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_CENTER};
+    private final int[] recentKeys = new int[EMERGENCY_SEQ.length];
+    private int recentCount = 0;
+    private static int wrongPins = 0;
+
+    private void onRemoteKey(int code) {
+        if (code == KeyEvent.KEYCODE_ENTER) code = KeyEvent.KEYCODE_DPAD_CENTER;
+        if (recentCount == recentKeys.length) {
+            System.arraycopy(recentKeys, 1, recentKeys, 0, recentKeys.length - 1);
+            recentCount--;
+        }
+        recentKeys[recentCount++] = code;
+        if (recentCount < EMERGENCY_SEQ.length) return;
+        for (int i = 0; i < EMERGENCY_SEQ.length; i++) if (recentKeys[i] != EMERGENCY_SEQ[i]) return;
+        recentCount = 0;
+        String key = ScheduleUtil.nightKey(this);
+        if (key.equals(Prefs.emergencyUsedKey(this))) {
+            EventLog.add(this, "محاولة طوارئ مرفوضة: استُخدمت هذه الليلة");
+            hint.setText("زر الطوارئ استُخدم لهذه الليلة");
+            hint.setTextColor(Color.rgb(255, 125, 125));
+            return;
+        }
+        Prefs.setEmergencyUsedKey(this, key);
+        Prefs.setForceLockUntil(this, 0L);
+        Prefs.setBypassUntil(this, System.currentTimeMillis() + 30 * 60_000L);
+        EventLog.alert(this, "🆘 استُخدم زر الطوارئ: فتح 30 دقيقة");
+        entered.setLength(0);
+        forced = false;
+        stopSelf();
+    }
+
     private void unlockSuccess() {
+        wrongPins = 0;
         EventLog.add(this, "فتح القفل بالـPIN");
+        Prefs.setForceLockUntil(this, 0L);
+        ScreenTracker.restartSessionAt(this, System.currentTimeMillis());
         if (!forced && ScheduleUtil.shouldLock(this)) {
             Prefs.setBypassUntil(this, ScheduleUtil.currentWindowEnd(this));
         }
@@ -339,12 +382,17 @@ public class LockOverlayService extends Service {
     }
 
     private void tryUnlock() {
-        if (Prefs.pin(this).equals(entered.toString())) {
+        if (Prefs.checkPin(this, entered.toString())) {
             unlockSuccess();
         } else {
             entered.setLength(0);
             updateDots();
-            EventLog.add(this, "PIN غلط على شاشة القفل");
+            if (++wrongPins >= 3) {
+                wrongPins = 0;
+                EventLog.alert(this, "⚠ 3 محاولات PIN غلط على شاشة التلفزيون");
+            } else {
+                EventLog.add(this, "PIN غلط على شاشة القفل");
+            }
             hint.setText("PIN غير صحيح — حاول مرة أخرى");
             hint.setTextColor(Color.rgb(255, 125, 125));
         }
