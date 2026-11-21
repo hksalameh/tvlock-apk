@@ -97,13 +97,13 @@ public class AdminGuardActivity extends Activity {
             LinearLayout row=new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL);
             row.setLayoutDirection(android.view.View.LAYOUT_DIRECTION_LTR);
             for(String k:r){
-                Button b=new Button(this);
-                b.setText(k); b.setTextSize(k.equals("⌫")||k.equals("✓")?18:22); b.setAllCaps(false);
-                b.setFocusable(true); b.setMinHeight(0); b.setMinWidth(0); b.setPadding(0,0,0,0); b.setStateListAnimator(null);
-                b.setBackground(keyBg(light,dn));
-                b.setTextColor(new android.content.res.ColorStateList(
+                Button kb=new Button(this);
+                kb.setText(k); kb.setTextSize(k.equals("⌫")||k.equals("✓")?18:22); kb.setAllCaps(false);
+                kb.setFocusable(true); kb.setMinHeight(0); kb.setMinWidth(0); kb.setPadding(0,0,0,0); kb.setStateListAnimator(null);
+                kb.setBackground(keyBg(light,dn));
+                kb.setTextColor(new android.content.res.ColorStateList(
                         new int[][]{{android.R.attr.state_focused},{}},new int[]{Color.WHITE,fg}));
-                b.setOnClickListener(v->{
+                kb.setOnClickListener(v->{
                     String cur=pin.getText().toString();
                     if(k.equals("⌫")){ if(!cur.isEmpty()) pin.setText(cur.substring(0,cur.length()-1)); }
                     else if(k.equals("✓")) verify.run();
@@ -111,8 +111,8 @@ public class AdminGuardActivity extends Activity {
                 });
                 int w=light?dp(70):dp(58), h=light?dp(44):dp(58);
                 LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(w,h); lp.setMargins(dp(6),dp(4),dp(6),dp(4));
-                row.addView(b,lp);
-                if(k.equals("5")) five=b;
+                row.addView(kb,lp);
+                if(k.equals("5")) five=kb;
             }
             root.addView(row,new LinearLayout.LayoutParams(-2,-2));
         }
