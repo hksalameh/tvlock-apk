@@ -34,8 +34,10 @@ public class MainActivity extends Activity {
 
     private int BLUE=Color.rgb(48,157,255);
     private int CYAN=Color.rgb(83,210,255);
-    private final int TEXT=Color.rgb(244,248,255);
-    private final int MUTED=Color.rgb(173,201,232);
+    private int TEXT=Color.rgb(244,248,255);
+    private int MUTED=Color.rgb(200,212,236);
+    private boolean LIGHT=false;
+    private static final int LBLUE=Color.rgb(76,110,245);
 
     @Override protected void onCreate(Bundle b){
         super.onCreate(b);
@@ -58,29 +60,74 @@ public class MainActivity extends Activity {
         return super.onKeyDown(keyCode,e);
     }
 
-    private void applyTheme(){ CYAN=Theme.accent(this); BLUE=Theme.focus2(this); }
+    private void applyTheme(){
+        LIGHT=Prefs.pinStyle(this)==1;
+        if(LIGHT){ TEXT=Color.rgb(34,40,58); MUTED=Color.rgb(100,108,130); CYAN=LBLUE; BLUE=LBLUE; }
+        else { TEXT=Color.rgb(244,248,255); MUTED=Color.rgb(200,212,236); CYAN=Color.rgb(158,197,255); BLUE=Color.WHITE; }
+    }
 
     private void baseRoot(){
         applyTheme();
         FrameLayout frame=new FrameLayout(this);
-        frame.addView(new LockBackgroundView(this),
-                new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT));
-
-        View shade=new View(this);
-        shade.setBackgroundColor(Color.argb(62,0,8,25));
-        frame.addView(shade,new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT));
-
+        frame.addView(new PinBackgroundView(this,LIGHT),new FrameLayout.LayoutParams(-1,-1));
         ScrollView scroll=new ScrollView(this);
         scroll.setFillViewport(true);
         scroll.setVerticalScrollBarEnabled(false);
         root=new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER_HORIZONTAL);
-        int sx=Math.max(dp(24),(int)(getResources().getDisplayMetrics().widthPixels*0.045f));
-        root.setPadding(sx,dp(16),sx,dp(22));
-        scroll.addView(root,new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
-        frame.addView(scroll,new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT));
+        scroll.addView(root,new ScrollView.LayoutParams(-1,-2));
+        int sw=getResources().getDisplayMetrics().widthPixels;
+        if(LIGHT){
+            root.setPadding(dp(26),dp(22),dp(26),dp(10));
+            FrameLayout card=new FrameLayout(this);
+            GradientDrawable cb=new GradientDrawable(); cb.setColor(Color.WHITE); cb.setCornerRadius(dp(28));
+            card.setBackground(cb); card.setClipToOutline(true); card.setElevation(dp(14));
+            card.addView(scroll,new FrameLayout.LayoutParams(-1,-1));
+            FrameLayout.LayoutParams cl=new FrameLayout.LayoutParams(-1,-1);
+            int mx=(int)(sw*.06f); cl.setMargins(mx,dp(26),mx,dp(34));
+            frame.addView(card,cl);
+        } else {
+            int sx=(int)(sw*.07f);
+            root.setPadding(sx,dp(28),sx,dp(10));
+            frame.addView(scroll,new FrameLayout.LayoutParams(-1,-1));
+        }
+        TextView brand=text("HKS  ·  hksalameh",10,LIGHT?Color.argb(190,255,255,255):Color.argb(115,255,255,255));
+        brand.setLetterSpacing(.3f); brand.setGravity(Gravity.CENTER);
+        frame.addView(brand,new FrameLayout.LayoutParams(-1,dp(30),Gravity.BOTTOM));
         setContentView(frame);
+    }
+
+    /** في الشكل الفاتح: كل الأزرار رمادي فاتح ونص داكن، وعند التحديد أزرق ونص أبيض. */
+    private void lightFix(View v){
+        if(!LIGHT || v==null) return;
+        if(v instanceof Button && !"keep".equals(v.getTag())){
+            Button b=(Button)v;
+            b.setBackground(keyBg(true,getResources().getDisplayMetrics().density));
+            b.setTextColor(selColors(TEXT));
+        }
+        if(v instanceof ViewGroup){ ViewGroup g=(ViewGroup)v; for(int i=0;i<g.getChildCount();i++) lightFix(g.getChildAt(i)); }
+    }
+
+    private android.content.res.ColorStateList selColors(int normal){
+        return new android.content.res.ColorStateList(
+            new int[][]{{android.R.attr.state_focused},{android.R.attr.state_pressed},{}},
+            new int[]{Color.WHITE,Color.WHITE,normal});
+    }
+
+    private android.graphics.drawable.StateListDrawable rowBg(int radius){
+        GradientDrawable flat=new GradientDrawable(), foc=new GradientDrawable();
+        flat.setCornerRadius(dp(radius)); foc.setCornerRadius(dp(radius));
+        if(LIGHT){ flat.setColor(Color.rgb(238,241,248)); foc.setColor(LBLUE); }
+        else {
+            flat.setColor(Color.argb(20,255,255,255)); flat.setStroke(dp(1),Color.argb(38,255,255,255));
+            foc.setColor(Color.argb(70,255,255,255)); foc.setStroke(dp(2),Color.WHITE);
+        }
+        android.graphics.drawable.StateListDrawable sl=new android.graphics.drawable.StateListDrawable();
+        sl.addState(new int[]{android.R.attr.state_focused},foc);
+        sl.addState(new int[]{android.R.attr.state_pressed},foc);
+        sl.addState(new int[]{},flat);
+        return sl;
     }
 
     private void brandHeader(String heading,String sub){
@@ -297,70 +344,108 @@ public class MainActivity extends Activity {
     }
 
     private void buildDashboard(){
-        authenticated=true; inSettings=false; page=null; hideKeyboard(null); baseRoot();
-        root.addView(new View(this),new LinearLayout.LayoutParams(1,0,.8f));
+        authenticated=true; inSettings=false; page=null; hideKeyboard(null); applyTheme();
+        float dn=getResources().getDisplayMetrics().density;
+        FrameLayout frame=new FrameLayout(this);
+        frame.addView(new PinBackgroundView(this,LIGHT),new FrameLayout.LayoutParams(-1,-1));
 
+        // الساعة والحالة
+        LinearLayout top=new LinearLayout(this); top.setOrientation(LinearLayout.VERTICAL); top.setGravity(Gravity.CENTER);
         android.widget.TextClock clock=new android.widget.TextClock(this);
         clock.setFormat12Hour("h:mm"); clock.setFormat24Hour("h:mm");
-        clock.setTextColor(TEXT); clock.setTextSize(84); clock.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        clock.setTextColor(Color.WHITE); clock.setTextSize(LIGHT?72:110);
+        clock.setTypeface(Typeface.create(LIGHT?"sans-serif-light":"sans-serif-thin",Typeface.NORMAL));
         clock.setGravity(Gravity.CENTER); clock.setIncludeFontPadding(false);
-        root.addView(clock,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(112)));
-        TextView date=new TextView(this);
-        date.setText(new java.text.SimpleDateFormat("a  ·  EEEE d MMMM",java.util.Locale.forLanguageTag("ar-u-nu-latn")).format(new java.util.Date()));
-        date.setTextColor(MUTED); date.setTextSize(17); date.setGravity(Gravity.CENTER);
-        root.addView(date,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(30)));
+        top.addView(clock,new LinearLayout.LayoutParams(-2,-2));
+        TextView date=text(new java.text.SimpleDateFormat("EEEE d MMMM",java.util.Locale.forLanguageTag("ar-u-nu-latn")).format(new java.util.Date()),LIGHT?15:18,Color.argb(215,255,255,255));
+        top.addView(date,new LinearLayout.LayoutParams(-2,-2));
 
         boolean locked=ScheduleUtil.shouldLock(this);
         boolean temp=!locked && Prefs.bypassUntil(this)>System.currentTimeMillis();
         int[] st=ScheduleUtil.effectiveStart(this,ScheduleUtil.tonightWindowDate(this));
         String pill;
-        int pc;
-        if(locked){ pill="● مقفول  ·  يُفتح "+fmtMs(ScheduleUtil.currentWindowEnd(this)); pc=Color.rgb(255,178,120); }
-        else if(!Prefs.enabled(this)){ pill="○ الجدول متوقف"; pc=MUTED; }
-        else if(temp){ pill="● فتح مؤقت حتى "+fmtMs(Prefs.bypassUntil(this)); pc=CYAN; }
-        else { pill="● مفتوح  ·  يقفل "+time(st[0],st[1]); pc=CYAN; }
-        TextView pl=text(pill,18,pc); pl.setGravity(Gravity.CENTER);
-        pl.setPadding(dp(22),dp(7),dp(22),dp(7));
-        pl.setBackground(roundBg(Color.argb(60,255,255,255),Color.argb(0,0,0,0),22));
-        LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT);
-        pp.setMargins(0,dp(10),0,dp(26));
-        root.addView(pl,pp);
+        if(locked) pill="●  مقفول  ·  يُفتح "+fmtMs(ScheduleUtil.currentWindowEnd(this));
+        else if(!Prefs.enabled(this)) pill="○  الجدول متوقف";
+        else if(temp) pill="●  فتح مؤقت حتى "+fmtMs(Prefs.bypassUntil(this));
+        else pill="●  مفتوح  ·  يقفل "+time(st[0],st[1]);
+        TextView pl=text(pill,LIGHT?14:16,Color.WHITE); pl.setGravity(Gravity.CENTER);
+        pl.setPadding(dp(20),dp(7),dp(20),dp(7));
+        pl.setBackground(roundBg(Color.argb(LIGHT?50:38,255,255,255),Color.TRANSPARENT,22));
+        LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(-2,-2); pp.setMargins(0,dp(16),0,0);
+        top.addView(pl,pp);
         status=null;
-        root.addView(new View(this),new LinearLayout.LayoutParams(1,0,1.2f));
 
-        Button lockNow=iconBtn("🔒","قفل الآن");
+        // الأزرار
+        LinearLayout bar=new LinearLayout(this); bar.setOrientation(LinearLayout.HORIZONTAL); bar.setGravity(Gravity.CENTER);
+        Button lockNow=dashItem(bar,"🔒","قفل الآن",dn);
         lockNow.setOnClickListener(v->{
             Prefs.setBypassUntil(this,0);
             Intent i=new Intent(this,LockOverlayService.class).putExtra("force",true);
             if(Build.VERSION.SDK_INT>=26) startForegroundService(i); else startService(i);
         });
-        Button tmp=iconBtn("⏱","فتح مؤقت");
-        tmp.setOnClickListener(v->showTempUnlockDialog());
-        Button enable=iconBtn(Prefs.enabled(this)?"⏸":"▶",Prefs.enabled(this)?"إيقاف الجدول":"تشغيل الجدول");
-        enable.setOnClickListener(v->{
+        dashItem(bar,"⏱","فتح مؤقت",dn).setOnClickListener(v->showTempUnlockDialog());
+        dashItem(bar,Prefs.enabled(this)?"⏸":"▶",Prefs.enabled(this)?"إيقاف الجدول":"تشغيل الجدول",dn).setOnClickListener(v->{
             Prefs.setEnabled(this,!Prefs.enabled(this));
             Prefs.setBypassUntil(this,0);
             ScheduleUtil.reschedule(this);
             LockOverlayService.sync(this);
             buildDashboard();
         });
-        Button settingsBtn=iconBtn("⚙","الإعدادات");
-        settingsBtn.setOnClickListener(v->{ inSettings=true; page="sched"; buildSettings(); });
-        LinearLayout bar=new LinearLayout(this);
-        bar.setOrientation(LinearLayout.HORIZONTAL); bar.setGravity(Gravity.CENTER);
-        for(Button x:new Button[]{lockNow,tmp,enable,settingsBtn}){
-            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(130),dp(76)); lp.setMargins(dp(10),0,dp(10),0);
-            bar.addView(x,lp);
-        }
-        LinearLayout.LayoutParams barLp=new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT);
-        barLp.setMargins(0,0,0,dp(8));
-        root.addView(bar,barLp);
+        dashItem(bar,"⚙","الإعدادات",dn).setOnClickListener(v->{ inSettings=true; page="sched"; buildSettings(); });
 
+        TextView warn=null;
         if(!Settings.canDrawOverlays(this) || !isAccessibilityEnabled() || !isDeviceAdminActive()){
-            TextView warning=note("⚠ بعض صلاحيات الحماية غير مفعّلة. افتح الإعدادات ثم الصلاحيات لإكمالها.");
-            warning.setTextColor(Color.rgb(255,202,120));
+            warn=text("⚠  بعض صلاحيات الحماية غير مفعّلة — الإعدادات ← الصلاحيات",13,LIGHT?Color.rgb(200,110,20):Color.rgb(255,202,120));
+            warn.setGravity(Gravity.CENTER);
         }
-        footer();
+
+        if(LIGHT){
+            LinearLayout card=new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL);
+            GradientDrawable cb=new GradientDrawable(); cb.setColor(Color.WHITE); cb.setCornerRadius(dp(28));
+            card.setBackground(cb); card.setClipToOutline(true); card.setElevation(dp(16));
+            GradientDrawable hb=new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{LBLUE,Color.rgb(112,72,232)});
+            float rr=dp(28); hb.setCornerRadii(new float[]{rr,rr,rr,rr,0,0,0,0});
+            top.setBackground(hb);
+            card.addView(top,new LinearLayout.LayoutParams(-1,0,1f));
+            LinearLayout bottom=new LinearLayout(this); bottom.setOrientation(LinearLayout.VERTICAL); bottom.setGravity(Gravity.CENTER);
+            bottom.addView(bar,new LinearLayout.LayoutParams(-2,-2));
+            if(warn!=null){ LinearLayout.LayoutParams wl=new LinearLayout.LayoutParams(-2,-2); wl.setMargins(0,dp(10),0,0); bottom.addView(warn,wl); }
+            card.addView(bottom,new LinearLayout.LayoutParams(-1,0,1f));
+            int sw=getResources().getDisplayMetrics().widthPixels;
+            frame.addView(card,new FrameLayout.LayoutParams(Math.min(dp(760),(int)(sw*.72f)),dp(430),Gravity.CENTER));
+        } else {
+            LinearLayout col=new LinearLayout(this); col.setOrientation(LinearLayout.VERTICAL); col.setGravity(Gravity.CENTER_HORIZONTAL);
+            col.addView(new View(this),new LinearLayout.LayoutParams(1,0,1f));
+            col.addView(top,new LinearLayout.LayoutParams(-1,-2));
+            col.addView(new View(this),new LinearLayout.LayoutParams(1,0,1f));
+            if(warn!=null){ LinearLayout.LayoutParams wl=new LinearLayout.LayoutParams(-2,-2); wl.setMargins(0,0,0,dp(12)); col.addView(warn,wl); }
+            col.addView(bar,new LinearLayout.LayoutParams(-2,-2));
+            col.setPadding(0,0,0,dp(46));
+            frame.addView(col,new FrameLayout.LayoutParams(-1,-1));
+        }
+        TextView brand=text("HKS  ·  hksalameh",10,LIGHT?Color.argb(190,255,255,255):Color.argb(115,255,255,255));
+        brand.setLetterSpacing(.3f); brand.setGravity(Gravity.CENTER);
+        frame.addView(brand,new FrameLayout.LayoutParams(-1,dp(30),Gravity.BOTTOM));
+        setContentView(frame);
+        root=null;
+        lockNow.post(lockNow::requestFocus);
+    }
+
+    private Button dashItem(LinearLayout bar,String icon,String label,float dn){
+        LinearLayout it=new LinearLayout(this); it.setOrientation(LinearLayout.VERTICAL); it.setGravity(Gravity.CENTER_HORIZONTAL);
+        Button b=new Button(this);
+        b.setText(icon); b.setTextSize(LIGHT?28:30); b.setAllCaps(false); b.setFocusable(true);
+        b.setMinHeight(0); b.setMinWidth(0); b.setPadding(0,0,0,0); b.setStateListAnimator(null);
+        b.setTextColor(LIGHT?selColors(TEXT):android.content.res.ColorStateList.valueOf(Color.WHITE));
+        b.setBackground(keyBg(LIGHT,dn));
+        int sz=LIGHT?dp(76):dp(84);
+        it.addView(b,new LinearLayout.LayoutParams(sz,sz));
+        TextView l=text(label,14,LIGHT?TEXT:Color.argb(220,255,255,255)); l.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams ll=new LinearLayout.LayoutParams(-2,-2); ll.setMargins(0,dp(8),0,0);
+        it.addView(l,ll);
+        LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(dp(120),-2); ip.setMargins(dp(LIGHT?6:14),0,dp(LIGHT?6:14),0);
+        bar.addView(it,ip);
+        return b;
     }
 
     private String page=null;
@@ -372,9 +457,10 @@ public class MainActivity extends Activity {
     }
 
     private void section2(String s){
-        TextView t=text(s,15,CYAN); t.setTypeface(Typeface.DEFAULT,Typeface.BOLD); t.setGravity(Gravity.CENTER);
-        t.setPadding(0,dp(10),0,dp(3));
-        root.addView(t,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(34)));
+        TextView t=text(s,LIGHT?22:24,TEXT);
+        t.setTypeface(LIGHT?Typeface.DEFAULT_BOLD:Typeface.create("sans-serif-light",Typeface.NORMAL)); t.setGravity(Gravity.START);
+        t.setPadding(dp(4),0,dp(4),dp(6));
+        root.addView(t,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
     }
 
     private Button card(String icon,String title,String summary,String target){
@@ -401,8 +487,6 @@ public class MainActivity extends Activity {
         accordion=false;
         if(page==null) page="sched";
 
-        TextView title=text("الإعدادات",22,TEXT); title.setTypeface(Typeface.DEFAULT,Typeface.BOLD); title.setGravity(Gravity.CENTER);
-        root.addView(title,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(40)));
 
         final LinearLayout outer=root;
         LinearLayout split=new LinearLayout(this);
@@ -411,8 +495,9 @@ public class MainActivity extends Activity {
 
         LinearLayout menu=new LinearLayout(this);
         menu.setOrientation(LinearLayout.VERTICAL);
-        menu.setPadding(dp(6),dp(6),dp(6),dp(6));
-        menu.setBackground(roundBg(Color.argb(90,0,0,0),Color.argb(0,0,0,0),16));
+        menu.setPadding(dp(8),dp(8),dp(8),dp(8));
+        if(LIGHT) menu.setBackground(roundBg(Color.rgb(244,245,251),Color.TRANSPARENT,20));
+        else menu.setBackground(roundBg(Color.argb(16,255,255,255),Color.argb(30,255,255,255),20));
         String[][] items={
             {"sched","🕒","الجدول الليلي"},{"exam","📚","الامتحانات"},{"session","⏸","حد التشغيل"},
             {"apps","📱","قفل التطبيقات"},{"protect","🔐","الحماية والرسالة"},{"perms","✅","الصلاحيات"},
@@ -437,7 +522,7 @@ public class MainActivity extends Activity {
         content.setPadding(dp(16),0,dp(8),0);
         LinearLayout.LayoutParams cl=new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f);
         split.addView(content,cl);
-        outer.addView(split,new LinearLayout.LayoutParams(Math.min(dp(1100),(int)(sw*.88f)),ViewGroup.LayoutParams.WRAP_CONTENT));
+        outer.addView(split,new LinearLayout.LayoutParams(-1,ViewGroup.LayoutParams.WRAP_CONTENT));
 
         root=content;
         switch(page){
@@ -448,11 +533,11 @@ public class MainActivity extends Activity {
             case "update": section2("التحديث"); pgUpdate(); break;
             case "protect": section2("الحماية والرسالة"); pgProtect(); break;
             case "perms": section2("الصلاحيات"); pgPerms(); break;
-            case "theme": section2("المظهر والألوان"); pgTheme(); break;
+            case "theme": section2("المظهر"); pgTheme(); break;
             default: break;
         }
         root=outer;
-        footer();
+        lightFix(content);
         if(selected!=null) selected.requestFocus();
     }
 
@@ -463,20 +548,22 @@ public class MainActivity extends Activity {
 
     private Button menuItem(String icon,String label,boolean sel){
         Button b=new Button(this);
+        b.setTag("keep");
         b.setText(icon+"   "+label); b.setTextSize(15); b.setAllCaps(false); b.setFocusable(true);
-        b.setTextColor(sel?Color.WHITE:MUTED); b.setGravity(Gravity.CENTER_VERTICAL|Gravity.START);
-        b.setMinHeight(0); b.setMinWidth(0); b.setPadding(dp(12),0,dp(12),0);
-        android.graphics.drawable.StateListDrawable d=Theme.focusBg(this,getResources().getDisplayMetrics().density);
-        if(sel){ b.setBackground(Theme.focusBg(this,getResources().getDisplayMetrics().density)); b.setSelected(true); }
-        else { 
-            android.graphics.drawable.StateListDrawable sl=new android.graphics.drawable.StateListDrawable();
-            GradientDrawable focused=new GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP,new int[]{Theme.focus1(this),Theme.focus2(this)});
-            focused.setCornerRadius(dp(12)); focused.setStroke(dp(2),CYAN);
-            GradientDrawable flat=new GradientDrawable(); flat.setColor(Color.TRANSPARENT); flat.setCornerRadius(dp(12));
-            sl.addState(new int[]{android.R.attr.state_focused},focused);
-            sl.addState(new int[]{},flat);
-            b.setBackground(sl);
-        }
+        b.setGravity(Gravity.CENTER_VERTICAL|Gravity.START); b.setStateListAnimator(null);
+        b.setMinHeight(0); b.setMinWidth(0); b.setPadding(dp(14),0,dp(14),0);
+        GradientDrawable on=new GradientDrawable(), focused=new GradientDrawable(), flat=new GradientDrawable();
+        for(GradientDrawable g:new GradientDrawable[]{on,focused,flat}) g.setCornerRadius(dp(14));
+        flat.setColor(Color.TRANSPARENT);
+        if(LIGHT){ on.setColor(LBLUE); focused.setColor(Color.rgb(98,128,250)); focused.setStroke(dp(2),Color.rgb(40,60,180)); }
+        else { on.setColor(Color.argb(55,255,255,255)); on.setStroke(dp(1),Color.argb(120,255,255,255));
+               focused.setColor(Color.argb(80,255,255,255)); focused.setStroke(dp(2),Color.WHITE); }
+        android.graphics.drawable.StateListDrawable sl=new android.graphics.drawable.StateListDrawable();
+        sl.addState(new int[]{android.R.attr.state_focused},focused);
+        sl.addState(new int[]{},sel?on:flat);
+        b.setBackground(sl);
+        int normal=sel?(LIGHT?Color.WHITE:Color.WHITE):(LIGHT?Color.rgb(74,80,104):Color.argb(200,255,255,255));
+        b.setTextColor(selColors(normal));
         return b;
     }
 
@@ -485,24 +572,19 @@ public class MainActivity extends Activity {
         LinearLayout r=new LinearLayout(this);
         r.setOrientation(LinearLayout.HORIZONTAL); r.setGravity(Gravity.CENTER_VERTICAL);
         r.setFocusable(true); r.setClickable(true);
-        r.setPadding(dp(14),0,dp(14),0);
-        GradientDrawable flat=new GradientDrawable(); flat.setColor(Color.argb(46,255,255,255)); flat.setCornerRadius(dp(10));
-        GradientDrawable foc=new GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP,new int[]{Theme.focus1(this),Theme.focus2(this)});
-        foc.setCornerRadius(dp(10)); foc.setStroke(dp(2),CYAN);
-        android.graphics.drawable.StateListDrawable sl=new android.graphics.drawable.StateListDrawable();
-        sl.addState(new int[]{android.R.attr.state_focused},foc);
-        sl.addState(new int[]{android.R.attr.state_pressed},foc);
-        sl.addState(new int[]{},flat);
-        r.setBackground(sl);
+        r.setPadding(dp(18),0,dp(18),0);
+        r.setBackground(rowBg(14));
         TextView lb=text(label,16,TEXT); lb.setGravity(Gravity.CENTER_VERTICAL|Gravity.START);
+        lb.setDuplicateParentStateEnabled(true); if(LIGHT) lb.setTextColor(selColors(TEXT));
         r.addView(lb,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f));
         if(value!=null && !value.isEmpty()){
             TextView vl=text(value,15,CYAN); vl.setGravity(Gravity.CENTER_VERTICAL|Gravity.END);
+            vl.setDuplicateParentStateEnabled(true); vl.setTextColor(selColors(CYAN));
             r.addView(vl,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT));
         }
         if(l!=null) r.setOnClickListener(l);
-        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(44));
-        lp.setMargins(0,dp(3),0,dp(3));
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(48));
+        lp.setMargins(0,dp(4),0,dp(4));
         root.addView(r,lp);
         return r;
     }
@@ -510,7 +592,7 @@ public class MainActivity extends Activity {
     private LinearLayout switchRow(String label,boolean on,View.OnClickListener l){
         LinearLayout r=row(label,on?"●  شغّال":"○  موقوف",l);
         TextView v=(TextView)r.getChildAt(1);
-        v.setTextColor(on?Color.rgb(140,240,160):MUTED);
+        v.setTextColor(selColors(on?(LIGHT?Color.rgb(30,150,70):Color.rgb(140,240,160)):MUTED));
         return r;
     }
 
@@ -521,14 +603,8 @@ public class MainActivity extends Activity {
     }
 
     private void pgTheme(){
-        group("اختر مجموعة الألوان — تنطبق على لوحة التحكم وشاشة القفل");
-        for(int i=0;i<Theme.NAMES.length;i++){
-            final int k=i;
-            boolean sel=Theme.idx(this)==i;
-            row(Theme.ICONS[i]+"   "+Theme.NAMES[i],sel?"✓":"",v->{ Prefs.setTheme(this,k); buildSettings(); });
-        }
-        group("شكل شاشة الرمز");
-        String[] ps={"🌌   داكن زجاجي (A)","☀️   بطاقة فاتحة (C)"};
+        group("شكل البرنامج — يتغيّر شاشة الرمز والرئيسية والإعدادات معاً");
+        String[] ps={"🌌   داكن زجاجي","☀️   بطاقة فاتحة"};
         for(int i=0;i<ps.length;i++){
             final int k=i;
             row(ps[i],Prefs.pinStyle(this)==i?"✓":"",v->{ Prefs.setPinStyle(this,k); buildSettings(); });
@@ -562,13 +638,13 @@ public class MainActivity extends Activity {
             boolean on=Prefs.dayEnabled(this,d);
             TextView c=text(shortN[i-1],15,on?Color.WHITE:MUTED);
             c.setGravity(Gravity.CENTER); c.setFocusable(true); c.setClickable(true);
-            GradientDrawable fill=new GradientDrawable(); fill.setCornerRadius(dp(10));
-            fill.setColor(on?Theme.focus1(this):Color.argb(46,255,255,255));
-            GradientDrawable foc=new GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP,new int[]{Theme.focus1(this),Theme.focus2(this)});
-            foc.setCornerRadius(dp(10)); foc.setStroke(dp(2),CYAN);
+            GradientDrawable fill=new GradientDrawable(); fill.setCornerRadius(dp(12));
+            if(LIGHT) fill.setColor(on?LBLUE:Color.rgb(238,241,248)); else { fill.setColor(on?Color.argb(70,255,255,255):Color.argb(18,255,255,255)); fill.setStroke(dp(1),Color.argb(on?120:38,255,255,255)); }
+            GradientDrawable foc=new GradientDrawable(); foc.setCornerRadius(dp(12));
+            if(LIGHT){ foc.setColor(Color.rgb(98,128,250)); foc.setStroke(dp(2),Color.rgb(40,60,180)); } else { foc.setColor(Color.argb(95,255,255,255)); foc.setStroke(dp(2),Color.WHITE); }
             android.graphics.drawable.StateListDrawable sl=new android.graphics.drawable.StateListDrawable();
             sl.addState(new int[]{android.R.attr.state_focused},foc); sl.addState(new int[]{},fill);
-            c.setBackground(sl);
+            c.setBackground(sl); c.setTextColor(selColors(on?Color.WHITE:MUTED));
             c.setOnClickListener(v->{ Prefs.setDayEnabled(this,d,!Prefs.dayEnabled(this,d)); ScheduleUtil.reschedule(this); buildSettings(); });
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(42),1f); lp.setMargins(dp(3),0,dp(3),0);
             days.addView(c,lp);

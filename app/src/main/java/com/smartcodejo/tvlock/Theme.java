@@ -42,7 +42,7 @@ final class Theme {
     private static final int[][] CARD = {
             rgb(6,30,66), rgb(4,40,36), rgb(50,14,50), rgb(34,28,10), rgb(28,14,64), rgb(20,26,34)};
 
-    static int idx(Context c) { return Math.max(0, Math.min(NAMES.length - 1, Prefs.theme(c))); }
+    static int idx(Context c) { return 0; }
     private static int col(int[] v) { return Color.rgb(v[0], v[1], v[2]); }
     private static int col(int[] v, int a) { return Color.argb(a, v[0], v[1], v[2]); }
 
@@ -64,14 +64,14 @@ final class Theme {
     /** Button background: normal / focused / pressed, in the current palette. */
     static StateListDrawable focusBg(Context c, float density) {
         int r = (int) (16 * density), w2 = Math.max(1, (int) (2 * density)), w1 = Math.max(1, (int) density);
-        GradientDrawable focused = new GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP,
-                new int[]{focus1(c), focus2(c)});
+        GradientDrawable focused = new GradientDrawable();
+        focused.setColor(Color.argb(85, 255, 255, 255));
         focused.setCornerRadius(r);
-        focused.setStroke(w2, accent(c));
+        focused.setStroke(w2, Color.WHITE);
         GradientDrawable normal = new GradientDrawable();
-        normal.setColor(card(c, 150));
+        normal.setColor(Color.argb(28, 255, 255, 255));
         normal.setCornerRadius(r);
-        normal.setStroke(w1, accent(c, 120));
+        normal.setStroke(w1, Color.argb(60, 255, 255, 255));
         StateListDrawable s = new StateListDrawable();
         s.addState(new int[]{android.R.attr.state_pressed}, focused);
         s.addState(new int[]{android.R.attr.state_focused}, focused);
