@@ -675,48 +675,62 @@ public class MainActivity extends Activity {
     }
 
     private void pickTime(String title,int h0,int m0,TimeSaver saver){
-        final int[] value={h0,m0};
+        final int[] v={h0%12==0?12:h0%12, m0, h0>=12?1:0}; // ساعة 1-12، دقيقة، 0=ص 1=م
         LinearLayout box=new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL); box.setGravity(Gravity.CENTER_HORIZONTAL);
-        box.setPadding(dp(18),dp(6),dp(18),dp(4));
+        box.setPadding(dp(18),dp(4),dp(18),dp(4));
 
-        TextView display=text(time(value[0],value[1]),24,Color.WHITE);
-        display.setTypeface(Typeface.DEFAULT,Typeface.BOLD); display.setGravity(Gravity.CENTER);
-        display.setBackground(roundBg(Color.rgb(7,32,68),Color.rgb(73,154,238),12));
-        box.addView(display,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(46)));
-        TextView help=text("استخدم الأسهم وزر OK فقط",12,Color.rgb(190,210,235)); help.setGravity(Gravity.CENTER);
-        box.addView(help,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(24)));
+        LinearLayout cols=new LinearLayout(this); cols.setOrientation(LinearLayout.HORIZONTAL); cols.setGravity(Gravity.CENTER);
+        cols.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
+        TextView hv=text("",42,Color.WHITE), mv=text("",42,Color.WHITE), ap=text("",20,Color.rgb(120,210,255));
+        TextView colon=text(":",40,Color.rgb(120,170,220));
+        for(TextView t:new TextView[]{hv,mv,ap,colon}){ t.setTypeface(Typeface.DEFAULT,Typeface.BOLD); t.setGravity(Gravity.CENTER); }
+        Button hu=dialogButton("▲"), hd=dialogButton("▼"), mu=dialogButton("▲"), md=dialogButton("▼"), apBtn=dialogButton("ص / م");
+        cols.addView(column(hu,hv,hd),new LinearLayout.LayoutParams(dp(110),ViewGroup.LayoutParams.WRAP_CONTENT));
+        cols.addView(colon,new LinearLayout.LayoutParams(dp(24),ViewGroup.LayoutParams.WRAP_CONTENT));
+        cols.addView(column(mu,mv,md),new LinearLayout.LayoutParams(dp(110),ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout apCol=new LinearLayout(this); apCol.setOrientation(LinearLayout.VERTICAL); apCol.setGravity(Gravity.CENTER);
+        apCol.addView(ap,new LinearLayout.LayoutParams(dp(64),dp(44)));
+        apCol.addView(apBtn,new LinearLayout.LayoutParams(dp(64),dp(40)));
+        LinearLayout.LayoutParams apLp=new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT);
+        apLp.setMargins(dp(14),0,0,0);
+        cols.addView(apCol,apLp);
+        box.addView(cols,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
+        TextView help=text("▲ ▼ للتغيير  •  الدقائق كل 5  •  OK للتأكيد",11,Color.rgb(160,185,215)); help.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams hl=new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(26)); hl.setMargins(0,dp(6),0,0);
+        box.addView(help,hl);
 
-        LinearLayout hours=new LinearLayout(this); hours.setOrientation(LinearLayout.HORIZONTAL); hours.setGravity(Gravity.CENTER);
-        Button hourMinus=dialogButton("الساعة −"), hourPlus=dialogButton("الساعة +");
-        hours.addView(hourMinus,dialogButtonParams()); hours.addView(hourPlus,dialogButtonParams());
-        box.addView(hours,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(52)));
-
-        LinearLayout minutes=new LinearLayout(this); minutes.setOrientation(LinearLayout.HORIZONTAL); minutes.setGravity(Gravity.CENTER);
-        Button minuteMinus=dialogButton("الدقيقة −"), minutePlus=dialogButton("الدقيقة +");
-        minutes.addView(minuteMinus,dialogButtonParams()); minutes.addView(minutePlus,dialogButtonParams());
-        box.addView(minutes,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(52)));
-
-        Runnable update=()->display.setText(time(value[0],value[1]));
-        hourMinus.setOnClickListener(v->{ value[0]=(value[0]+23)%24; update.run(); });
-        hourPlus.setOnClickListener(v->{ value[0]=(value[0]+1)%24; update.run(); });
-        minuteMinus.setOnClickListener(v->{ value[1]=(value[1]+59)%60; update.run(); });
-        minutePlus.setOnClickListener(v->{ value[1]=(value[1]+1)%60; update.run(); });
+        Runnable update=()->{ hv.setText(String.valueOf(v[0])); mv.setText(String.format("%02d",v[1])); ap.setText(v[2]==0?"ص":"م"); };
+        update.run();
+        hu.setOnClickListener(x->{ v[0]=v[0]%12+1; update.run(); });
+        hd.setOnClickListener(x->{ v[0]=(v[0]+10)%12+1; update.run(); });
+        mu.setOnClickListener(x->{ v[1]=(v[1]/5*5+5)%60; update.run(); });
+        md.setOnClickListener(x->{ v[1]=v[1]%5==0?(v[1]+55)%60:v[1]/5*5; update.run(); });
+        apBtn.setOnClickListener(x->{ v[2]=1-v[2]; update.run(); });
 
         android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(this)
-                .setTitle(title)
-                .setView(box)
-                .setPositiveButton("حفظ",(d,w)->saver.save(value[0],value[1])).setNegativeButton("إلغاء",null).create();
+                .setTitle(title).setView(box)
+                .setPositiveButton("حفظ",(d,w)->saver.save((v[0]%12)+(v[2]==1?12:0),v[1]))
+                .setNegativeButton("إلغاء",null).create();
         dialog.setOnShowListener(x->{
-            hourPlus.requestFocus();
+            hu.requestFocus();
             if(dialog.getWindow()!=null){
-                int screenW=getResources().getDisplayMetrics().widthPixels;
-                int screenH=getResources().getDisplayMetrics().heightPixels;
-                dialog.getWindow().setLayout(Math.min(dp(560),(int)(screenW*.46f)),Math.min(dp(330),(int)(screenH*.62f)));
+                int sw=getResources().getDisplayMetrics().widthPixels, sh=getResources().getDisplayMetrics().heightPixels;
+                dialog.getWindow().setLayout(Math.min(dp(520),(int)(sw*.5f)),Math.min(dp(400),(int)(sh*.8f)));
                 dialog.getWindow().setGravity(Gravity.CENTER);
             }
         });
         dialog.show();
+    }
+
+    private LinearLayout column(Button up,TextView val,Button down){
+        LinearLayout c=new LinearLayout(this); c.setOrientation(LinearLayout.VERTICAL); c.setGravity(Gravity.CENTER);
+        c.addView(up,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(40)));
+        val.setBackground(roundBg(Color.rgb(7,32,68),Color.rgb(73,154,238),12));
+        LinearLayout.LayoutParams vl=new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(70)); vl.setMargins(0,dp(6),0,dp(6));
+        c.addView(val,vl);
+        c.addView(down,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(40)));
+        return c;
     }
 
     private void refreshStatus(){
@@ -907,9 +921,12 @@ public class MainActivity extends Activity {
     }
 
     private void footer(){
-        TextView f=text("من صنع  hksalameh  |  HKS",11,Color.rgb(146,183,222)); f.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(30));
-        lp.setMargins(0,dp(8),0,0); root.addView(f,lp);
+        TextView f=text("من صنع  hksalameh",11,Color.rgb(146,183,222)); f.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(20));
+        lp.setMargins(0,dp(6),0,0); root.addView(f,lp);
+        HksLogoView logo=new HksLogoView(this);
+        LinearLayout.LayoutParams lp2=new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(38));
+        root.addView(logo,lp2);
     }
 
     private void hideKeyboard(View v){
